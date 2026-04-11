@@ -255,7 +255,11 @@ type Call {
   id: ID!, name: String, number: String!, duration: Int
   accountId: String, startedAt: String!, photoId: String
   type: Int!  # 1=incoming 2=outgoing 3=missed
-  geo: { isp: Int, city: String, province: String }  # isp: 1=China mobile 2=China unicom 3=China telecom 4=China uicom virtual 5=China telecom virtual 6=China mobile virtual
+  geo: {
+    isp: Int  # 0=unknown/non-China 1=China mobile 2=China unicom 3=China telecom 4=China uicom virtual 5=China telecom virtual 6=China mobile virtual
+    city: String
+    province: String
+  }
   tags: [Tag!]!
 }
 
@@ -312,8 +316,8 @@ type Mount {
 
 type App {
   usbConnected: Boolean!, urlToken: String, httpPort: Int!, httpsPort: Int
-  appDir: String!, deviceName: String!, battery: Int!, appVersion: String!
-  osVersion: String!, channel: String!, permissions: [String!]!
+  appDir: String!, deviceName: String!, battery: Int!, appVersion: Int!
+  osVersion: Int!, channel: String!, permissions: [String!]!
   audios: [PlaylistAudio!]!, audioCurrent: String, audioMode: String
   sdcardPath: String, usbDiskPaths: [String!]!, internalStoragePath: String!
   downloadsDir: String!, developerMode: Boolean!
@@ -328,16 +332,22 @@ type DeviceInfo {
   deviceId: String!, model: String!, product: String, fingerprint: String
   hardware: String, radioVersion: String, device: String, board: String
   displayVersion: String, buildBrand: String, buildHost: String
-  buildTime: String, uptime: String, buildUser: String, serial: String
-  osVersion: String!, language: String, sdkVersion: String
+  buildTime: String, uptime: Int, buildUser: String, serial: String
+  osVersion: String!, language: String, sdkVersion: Int
   javaVmVersion: String, kernelVersion: String, glEsVersion: String
-  screenDensity: Int, screenHeight: Int, screenWidth: Int
-  phoneNumbers: [{ id: String, name: String, number: String }]
+  screenDensity: String, screenHeight: Int, screenWidth: Int
+  phoneNumbers: [{ id: Int, name: String, number: String }]
 }
 
 type Battery {
-  level: Int!, voltage: Int, health: String, plugged: Boolean!
-  temperature: Float, status: String, technology: String, capacity: Int
+  level: Int!
+  voltage: Int
+  health: Int  # 1=Unknown 2=Good 3=Overheat 4=Dead 5=Over voltage 6=Unspecified failure 7=Cold
+  plugged: Int  # 0=not plugged 1=AC 2=USB 4=wireless
+  temperature: Float
+  status: Int  # 1=Unknown 2=Charging 3=Discharging 4=Not charging 5=Full
+  technology: String
+  capacity: Int
 }
 
 type ScreenMirrorQuality { mode: ScreenMirrorMode!, resolution: String }

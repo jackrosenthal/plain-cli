@@ -312,8 +312,8 @@ type App struct {
 	AppDir              string           `json:"appDir"`
 	DeviceName          string           `json:"deviceName"`
 	Battery             int              `json:"battery"`
-	AppVersion          string           `json:"appVersion"`
-	OSVersion           string           `json:"osVersion"`
+	AppVersion          int              `json:"appVersion"`
+	OSVersion           int              `json:"osVersion"`
 	Channel             string           `json:"channel"`
 	Permissions         []string         `json:"permissions"`
 	Audios              []PlaylistAudio  `json:"audios"`
@@ -335,7 +335,7 @@ type PlaylistAudio struct {
 }
 
 type DevicePhoneNumber struct {
-	ID     string `json:"id"`
+	ID     int    `json:"id"`
 	Name   string `json:"name"`
 	Number string `json:"number"`
 }
@@ -359,16 +359,16 @@ type DeviceInfo struct {
 	BuildBrand          string              `json:"buildBrand"`
 	BuildHost           string              `json:"buildHost"`
 	BuildTime           string              `json:"buildTime"`
-	Uptime              string              `json:"uptime"`
+	Uptime              int                 `json:"uptime"`
 	BuildUser           string              `json:"buildUser"`
 	Serial              string              `json:"serial"`
 	OSVersion           string              `json:"osVersion"`
 	Language            string              `json:"language"`
-	SDKVersion          string              `json:"sdkVersion"`
+	SDKVersion          int                 `json:"sdkVersion"`
 	JavaVMVersion       string              `json:"javaVmVersion"`
 	KernelVersion       string              `json:"kernelVersion"`
 	GLEsVersion         string              `json:"glEsVersion"`
-	ScreenDensity       int                 `json:"screenDensity"`
+	ScreenDensity       string              `json:"screenDensity"`
 	ScreenHeight        int                 `json:"screenHeight"`
 	ScreenWidth         int                 `json:"screenWidth"`
 	PhoneNumbers        []DevicePhoneNumber `json:"phoneNumbers"`
@@ -377,10 +377,10 @@ type DeviceInfo struct {
 type Battery struct {
 	Level       int     `json:"level"`
 	Voltage     int     `json:"voltage"`
-	Health      string  `json:"health"`
-	Plugged     bool    `json:"plugged"`
+	Health      int     `json:"health"`
+	Plugged     int     `json:"plugged"`
 	Temperature float64 `json:"temperature"`
-	Status      string  `json:"status"`
+	Status      int     `json:"status"`
 	Technology  string  `json:"technology"`
 	Capacity    int     `json:"capacity"`
 }
