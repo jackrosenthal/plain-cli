@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+	"unicode"
 
 	"github.com/jackrosenthal/plain-cli/internal/api"
 	"github.com/jackrosenthal/plain-cli/internal/client"
@@ -83,9 +85,9 @@ type SMSSendCmd struct {
 
 type SMSSendMMSCmd struct {
 	Number      string   `arg:"" help:"Phone number."`
-	Body        string   `arg:"" help:"Message body."`
-	ThreadID    string   `name:"thread-id" help:"Conversation thread ID." required:""`
-	Attachments []string `help:"Attachment paths."`
+	Body        string   `arg:"" optional:"" help:"Message body."`
+	ThreadID    string   `name:"thread-id" help:"Conversation thread ID. Inferred from the number when omitted and there is exactly one matching conversation."`
+	Attachments []string `name:"attachment" help:"Attachment path. Repeat for multiple attachments."`
 }
 
 type smsListResponse struct {
@@ -148,13 +150,25 @@ func (c *SMSSendMMSCmd) Run(apiClient *client.Client, printer output.Printer) er
 	if attachments == nil {
 		attachments = []string{}
 	}
+	if len(attachments) == 0 {
+		return errors.New("send mms: at least one attachment is required")
+	}
+
+	threadID := c.ThreadID
+	if threadID == "" {
+		var err error
+		threadID, err = resolveSMSConversationThreadID(context.Background(), apiClient, c.Number)
+		if err != nil {
+			return err
+		}
+	}
 
 	var resp smsMutationResponse
 	if err := apiClient.GraphQL(context.Background(), sendMMSMutation, map[string]any{
 		"attachmentPaths": attachments,
 		"body":            c.Body,
 		"number":          c.Number,
-		"threadId":        c.ThreadID,
+		"threadId":        threadID,
 	}, &resp); err != nil {
 		return fmt.Errorf("send mms: %w", err)
 	}
@@ -166,6 +180,50 @@ func (c *SMSSendMMSCmd) Run(apiClient *client.Client, printer output.Printer) er
 		Status:  "ok",
 		Message: fmt.Sprintf("MMS sent to %s.", c.Number),
 	})
+}
+
+func resolveSMSConversationThreadID(ctx context.Context, apiClient *client.Client, number string) (string, error) {
+	conversations, err := listSMSConversations(ctx, apiClient, "", 0, 0)
+	if err != nil {
+		return "", fmt.Errorf("resolve sms thread id: %w", err)
+	}
+
+	target := normalizePhoneNumber(number)
+	if target == "" {
+		return "", errors.New("resolve sms thread id: number has no digits")
+	}
+
+	matches := make([]api.MessageConversation, 0, 1)
+	for _, conversation := range conversations {
+		if normalizePhoneNumber(conversation.Address) == target {
+			matches = append(matches, conversation)
+		}
+	}
+
+	switch len(matches) {
+	case 0:
+		return "", fmt.Errorf("resolve sms thread id: no conversation found for %s; pass --thread-id", number)
+	case 1:
+		return matches[0].ID, nil
+	default:
+		return "", fmt.Errorf("resolve sms thread id: multiple conversations found for %s; pass --thread-id", number)
+	}
+}
+
+func normalizePhoneNumber(value string) string {
+	var digits strings.Builder
+	for _, r := range value {
+		if unicode.IsDigit(r) {
+			digits.WriteRune(r)
+		}
+	}
+
+	normalized := digits.String()
+	if len(normalized) > 10 {
+		return normalized[len(normalized)-10:]
+	}
+
+	return normalized
 }
 
 func listSMS(
