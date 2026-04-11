@@ -255,7 +255,7 @@ type Call {
   id: ID!, name: String, number: String!, duration: Int
   accountId: String, startedAt: String!, photoId: String
   type: Int!  # 1=incoming 2=outgoing 3=missed
-  geo: { isp: String, city: String, province: String }
+  geo: { isp: Int, city: String, province: String }  # isp: 1=China mobile 2=China unicom 3=China telecom 4=China uicom virtual 5=China telecom virtual 6=China mobile virtual
   tags: [Tag!]!
 }
 

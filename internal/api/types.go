@@ -159,7 +159,7 @@ type Contact struct {
 }
 
 type Geo struct {
-	ISP      string `json:"isp"`
+	ISP      int    `json:"isp"`
 	City     string `json:"city"`
 	Province string `json:"province"`
 }
