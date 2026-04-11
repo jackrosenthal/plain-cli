@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/term"
 	"github.com/jackrosenthal/plain-cli/internal/api"
 	"github.com/jackrosenthal/plain-cli/internal/client"
 	"github.com/jackrosenthal/plain-cli/internal/output"
@@ -175,7 +176,7 @@ type FilesCmd struct {
 }
 
 type FilesLSCmd struct {
-	Root   string `help:"Root path to list." default:"/"`
+	Root   string `arg:"" help:"Root path to list."`
 	Query  string `help:"Search query."`
 	Sort   string `help:"Sort field." default:"name" enum:"name,name-desc,size,size-desc,date,date-desc"`
 	Limit  int    `help:"Maximum number of results to return."`
@@ -320,23 +321,123 @@ type mutationStatus struct {
 	Message string `json:"message"`
 }
 
-func (c *FilesLSCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *FilesLSCmd) Run(cli *CLI, apiClient *client.Client, printer output.Printer) error {
 	sortBy := api.FileSortBy(c.Sort)
 	files, err := listFiles(context.Background(), apiClient, c.Root, c.Query, sortBy, c.Offset, c.Limit)
 	if err != nil {
 		return err
 	}
 
-	return printer.PrintList(files)
+	if cli != nil && cli.Output == output.FormatJSON {
+		return printer.PrintList(files)
+	}
+
+	return printLSOutput(os.Stdout, files, cli == nil || cli.Output == output.FormatTable)
 }
 
-func (c *FilesRecentCmd) Run(apiClient *client.Client, printer output.Printer) error {
+var (
+	lsDirStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("33"))
+	lsFileStyle = lipgloss.NewStyle()
+)
+
+func printLSOutput(w io.Writer, files []api.File, columns bool) error {
+	return printLSOutputFull(w, files, columns, false)
+}
+
+func printLSOutputFull(w io.Writer, files []api.File, columns bool, fullPath bool) error {
+	type entry struct {
+		name    string
+		display string
+		width   int
+	}
+
+	entries := make([]entry, 0, len(files))
+	maxWidth := 0
+	for _, f := range files {
+		var name string
+		if fullPath {
+			name = f.Path
+		} else {
+			name = path.Base(f.Path)
+		}
+		var display string
+		if f.IsDir {
+			display = lsDirStyle.Render(name + "/")
+		} else {
+			display = lsFileStyle.Render(name)
+		}
+		entries = append(entries, entry{name: name, display: display, width: lipgloss.Width(name) + boolInt(f.IsDir)})
+		if entries[len(entries)-1].width > maxWidth {
+			maxWidth = entries[len(entries)-1].width
+		}
+	}
+
+	if len(entries) == 0 {
+		return nil
+	}
+
+	if !columns {
+		for _, e := range entries {
+			if _, err := fmt.Fprintln(w, e.display); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	termWidth := 80
+	if width, _, err := term.GetSize(os.Stdout.Fd()); err == nil && width > 0 {
+		termWidth = width
+	}
+
+	colWidth := maxWidth + 2
+	numCols := termWidth / colWidth
+	if numCols < 1 {
+		numCols = 1
+	}
+	numRows := (len(entries) + numCols - 1) / numCols
+
+	var sb strings.Builder
+	for row := range numRows {
+		for col := range numCols {
+			idx := col*numRows + row
+			if idx >= len(entries) {
+				break
+			}
+			e := entries[idx]
+			sb.WriteString(e.display)
+			// pad to colWidth unless last in row
+			isLast := col == numCols-1 || (col+1)*numRows+row >= len(entries)
+			if !isLast {
+				padding := colWidth - e.width
+				sb.WriteString(strings.Repeat(" ", padding))
+			}
+		}
+		sb.WriteByte('\n')
+	}
+
+	_, err := io.WriteString(w, sb.String())
+	return err
+}
+
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+func (c *FilesRecentCmd) Run(cli *CLI, apiClient *client.Client, printer output.Printer) error {
 	var resp filesRecentResponse
 	if err := apiClient.GraphQL(context.Background(), recentFilesQuery, nil, &resp); err != nil {
 		return fmt.Errorf("query recent files: %w", err)
 	}
 
-	return printer.PrintList(resp.Data.RecentFiles)
+	if cli != nil && cli.Output == output.FormatJSON {
+		return printer.PrintList(resp.Data.RecentFiles)
+	}
+
+	return printLSOutputFull(os.Stdout, resp.Data.RecentFiles, cli == nil || cli.Output == output.FormatTable, true)
 }
 
 func (c *FilesInfoCmd) Run(apiClient *client.Client, printer output.Printer) error {

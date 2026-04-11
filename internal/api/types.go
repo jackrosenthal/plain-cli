@@ -374,37 +374,37 @@ func (p PhoneNumbers) String() string {
 }
 
 type DeviceInfo struct {
-	DeviceName          string              `json:"deviceName"`
-	ReleaseBuildVersion string              `json:"releaseBuildVersion"`
-	VersionCodeName     string              `json:"versionCodeName"`
-	Manufacturer        string              `json:"manufacturer"`
-	SecurityPatch       string              `json:"securityPatch"`
-	Bootloader          string              `json:"bootloader"`
-	DeviceID            string              `json:"deviceId"`
-	Model               string              `json:"model"`
-	Product             string              `json:"product"`
-	Fingerprint         string              `json:"fingerprint"`
-	Hardware            string              `json:"hardware"`
-	RadioVersion        string              `json:"radioVersion"`
-	Device              string              `json:"device"`
-	Board               string              `json:"board"`
-	DisplayVersion      string              `json:"displayVersion"`
-	BuildBrand          string              `json:"buildBrand"`
-	BuildHost           string              `json:"buildHost"`
-	BuildTime           string              `json:"buildTime"`
-	Uptime              MillisDuration      `json:"uptime"`
-	BuildUser           string              `json:"buildUser"`
-	Serial              string              `json:"serial"`
-	OSVersion           string              `json:"osVersion"`
-	Language            string              `json:"language"`
-	SDKVersion          int                 `json:"sdkVersion"`
-	JavaVMVersion       string              `json:"javaVmVersion"`
-	KernelVersion       string              `json:"kernelVersion"`
-	GLEsVersion         string              `json:"glEsVersion"`
-	ScreenDensity       string              `json:"screenDensity"`
-	ScreenHeight        int                 `json:"screenHeight"`
-	ScreenWidth         int                 `json:"screenWidth"`
-	PhoneNumbers        PhoneNumbers        `json:"phoneNumbers"`
+	DeviceName          string         `json:"deviceName"`
+	ReleaseBuildVersion string         `json:"releaseBuildVersion"`
+	VersionCodeName     string         `json:"versionCodeName"`
+	Manufacturer        string         `json:"manufacturer"`
+	SecurityPatch       string         `json:"securityPatch"`
+	Bootloader          string         `json:"bootloader"`
+	DeviceID            string         `json:"deviceId"`
+	Model               string         `json:"model"`
+	Product             string         `json:"product"`
+	Fingerprint         string         `json:"fingerprint"`
+	Hardware            string         `json:"hardware"`
+	RadioVersion        string         `json:"radioVersion"`
+	Device              string         `json:"device"`
+	Board               string         `json:"board"`
+	DisplayVersion      string         `json:"displayVersion"`
+	BuildBrand          string         `json:"buildBrand"`
+	BuildHost           string         `json:"buildHost"`
+	BuildTime           string         `json:"buildTime"`
+	Uptime              MillisDuration `json:"uptime"`
+	BuildUser           string         `json:"buildUser"`
+	Serial              string         `json:"serial"`
+	OSVersion           string         `json:"osVersion"`
+	Language            string         `json:"language"`
+	SDKVersion          int            `json:"sdkVersion"`
+	JavaVMVersion       string         `json:"javaVmVersion"`
+	KernelVersion       string         `json:"kernelVersion"`
+	GLEsVersion         string         `json:"glEsVersion"`
+	ScreenDensity       string         `json:"screenDensity"`
+	ScreenHeight        int            `json:"screenHeight"`
+	ScreenWidth         int            `json:"screenWidth"`
+	PhoneNumbers        PhoneNumbers   `json:"phoneNumbers"`
 }
 
 type BatteryHealth int
@@ -548,6 +548,17 @@ const (
 )
 
 func (f FileSortBy) ToGraphQL() string {
+	m := map[FileSortBy]string{
+		FileSortByName:     "NAME_ASC",
+		FileSortByNameDesc: "NAME_DESC",
+		FileSortBySize:     "SIZE_ASC",
+		FileSortBySizeDesc: "SIZE_DESC",
+		FileSortByDate:     "DATE_ASC",
+		FileSortByDateDesc: "DATE_DESC",
+	}
+	if v, ok := m[f]; ok {
+		return v
+	}
 	return toGraphQLEnum(string(f))
 }
 
