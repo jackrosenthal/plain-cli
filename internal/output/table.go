@@ -62,6 +62,8 @@ func (p *tablePrinter) Print(v any) error {
 		valueWidth = 1
 	}
 
+	emptyKeyStyle := tableKeyStyle.Width(keyWidth + 2)
+
 	var builder strings.Builder
 	for idx, field := range fields {
 		valueStyle := tableValueStyle
@@ -69,9 +71,15 @@ func (p *tablePrinter) Print(v any) error {
 			valueStyle = tableAltValueStyle
 		}
 
+		lines := strings.Split(field.Value, "\n")
 		builder.WriteString(tableKeyStyle.Width(keyWidth + 2).Render(field.Label))
-		builder.WriteString(valueStyle.Width(valueWidth + 2).Render(field.Value))
+		builder.WriteString(valueStyle.Width(valueWidth + 2).Render(lines[0]))
 		builder.WriteByte('\n')
+		for _, line := range lines[1:] {
+			builder.WriteString(emptyKeyStyle.Render(""))
+			builder.WriteString(valueStyle.Width(valueWidth + 2).Render(line))
+			builder.WriteByte('\n')
+		}
 	}
 
 	_, err = io.WriteString(p.w, builder.String())

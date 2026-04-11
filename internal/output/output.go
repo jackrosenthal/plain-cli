@@ -150,6 +150,10 @@ func stringifyValue(value reflect.Value) string {
 		return string(raw)
 	}
 
+	if stringer, ok := value.Interface().(fmt.Stringer); ok {
+		return stringer.String()
+	}
+
 	switch value.Kind() {
 	case reflect.String:
 		return value.String()
@@ -172,7 +176,7 @@ func stringifyValue(value reflect.Value) string {
 				parts = append(parts, stringifyValue(value.Index(idx)))
 			}
 
-			return strings.Join(parts, ", ")
+			return strings.Join(parts, "\n")
 		}
 
 		return marshalInlineJSON(value.Interface())

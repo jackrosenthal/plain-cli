@@ -2,8 +2,31 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 )
+
+// MillisDuration is an int (milliseconds) that displays as a human-readable
+// duration in table/plain output but marshals as a raw integer in JSON.
+type MillisDuration int
+
+func (d MillisDuration) String() string {
+	total := int(d) / 1000
+	days := total / 86400
+	hours := (total % 86400) / 3600
+	minutes := (total % 3600) / 60
+	seconds := total % 60
+	if days > 0 {
+		return fmt.Sprintf("%dd %dh %dm %ds", days, hours, minutes, seconds)
+	}
+	if hours > 0 {
+		return fmt.Sprintf("%dh %dm %ds", hours, minutes, seconds)
+	}
+	if minutes > 0 {
+		return fmt.Sprintf("%dm %ds", minutes, seconds)
+	}
+	return fmt.Sprintf("%ds", seconds)
+}
 
 type Tag struct {
 	ID    string `json:"id"`
@@ -340,6 +363,16 @@ type DevicePhoneNumber struct {
 	Number string `json:"number"`
 }
 
+type PhoneNumbers []DevicePhoneNumber
+
+func (p PhoneNumbers) String() string {
+	parts := make([]string, 0, len(p))
+	for _, n := range p {
+		parts = append(parts, fmt.Sprintf("id=%d: %s (%s)", n.ID, n.Name, n.Number))
+	}
+	return strings.Join(parts, "\n")
+}
+
 type DeviceInfo struct {
 	DeviceName          string              `json:"deviceName"`
 	ReleaseBuildVersion string              `json:"releaseBuildVersion"`
@@ -359,7 +392,7 @@ type DeviceInfo struct {
 	BuildBrand          string              `json:"buildBrand"`
 	BuildHost           string              `json:"buildHost"`
 	BuildTime           string              `json:"buildTime"`
-	Uptime              int                 `json:"uptime"`
+	Uptime              MillisDuration      `json:"uptime"`
 	BuildUser           string              `json:"buildUser"`
 	Serial              string              `json:"serial"`
 	OSVersion           string              `json:"osVersion"`
@@ -371,18 +404,82 @@ type DeviceInfo struct {
 	ScreenDensity       string              `json:"screenDensity"`
 	ScreenHeight        int                 `json:"screenHeight"`
 	ScreenWidth         int                 `json:"screenWidth"`
-	PhoneNumbers        []DevicePhoneNumber `json:"phoneNumbers"`
+	PhoneNumbers        PhoneNumbers        `json:"phoneNumbers"`
+}
+
+type BatteryHealth int
+
+func (h BatteryHealth) String() string {
+	return map[BatteryHealth]string{
+		1: "Unknown",
+		2: "Good",
+		3: "Overheat",
+		4: "Dead",
+		5: "Over voltage",
+		6: "Unspecified failure",
+		7: "Cold",
+	}[h]
+}
+
+type BatteryStatus int
+
+func (s BatteryStatus) String() string {
+	return map[BatteryStatus]string{
+		1: "Unknown",
+		2: "Charging",
+		3: "Discharging",
+		4: "Not charging",
+		5: "Full",
+	}[s]
+}
+
+type BatteryPlugged int
+
+func (p BatteryPlugged) String() string {
+	return map[BatteryPlugged]string{
+		0: "Not plugged",
+		1: "AC",
+		2: "USB",
+		4: "Wireless",
+	}[p]
+}
+
+type MilliVolts int
+
+func (v MilliVolts) String() string {
+	return fmt.Sprintf("%.3f V", float64(v)/1000)
+}
+
+type Celsius float64
+
+func (c Celsius) String() string {
+	return fmt.Sprintf("%.1f °C", float64(c))
+}
+
+type Percentage int
+
+func (p Percentage) String() string {
+	return fmt.Sprintf("%d%%", int(p))
+}
+
+type MilliAmpHours int
+
+func (m MilliAmpHours) String() string {
+	if m == 0 {
+		return "unavailable"
+	}
+	return fmt.Sprintf("%d mAh", int(m))
 }
 
 type Battery struct {
-	Level       int     `json:"level"`
-	Voltage     int     `json:"voltage"`
-	Health      int     `json:"health"`
-	Plugged     int     `json:"plugged"`
-	Temperature float64 `json:"temperature"`
-	Status      int     `json:"status"`
-	Technology  string  `json:"technology"`
-	Capacity    int     `json:"capacity"`
+	Level       Percentage     `json:"level"`
+	Voltage     MilliVolts     `json:"voltage"`
+	Health      BatteryHealth  `json:"health"`
+	Plugged     BatteryPlugged `json:"plugged"`
+	Temperature Celsius        `json:"temperature"`
+	Status      BatteryStatus  `json:"status"`
+	Technology  string         `json:"technology"`
+	Capacity    MilliAmpHours  `json:"capacity"`
 }
 
 type PomodoroToday struct {

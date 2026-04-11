@@ -43,7 +43,15 @@ func (p *plainPrinter) PrintList(v any) error {
 func writePlainRecord(w io.Writer, fields []fieldValue) error {
 	lines := make([]string, 0, len(fields))
 	for _, field := range fields {
-		lines = append(lines, fmt.Sprintf("%s: %s", field.Key, field.Value))
+		valueLines := strings.Split(field.Value, "\n")
+		indent := strings.Repeat(" ", len(field.Key)+2)
+		for i, vl := range valueLines {
+			if i == 0 {
+				lines = append(lines, fmt.Sprintf("%s: %s", field.Key, vl))
+			} else {
+				lines = append(lines, indent+vl)
+			}
+		}
 	}
 
 	if len(lines) == 0 {
