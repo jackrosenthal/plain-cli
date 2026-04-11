@@ -99,9 +99,8 @@ type NotesGetCmd struct {
 }
 
 type NotesSaveCmd struct {
-	ID      string `help:"Existing note ID."`
-	Title   string `help:"Note title." required:""`
-	Content string `help:"Note content. Reads stdin when omitted."`
+	ID    string `help:"Existing note ID."`
+	Title string `help:"Note title." required:""`
 }
 
 type NotesTrashCmd struct {
@@ -185,7 +184,7 @@ func (c *NotesGetCmd) Run(apiClient *client.Client, printer output.Printer) erro
 }
 
 func (c *NotesSaveCmd) Run(apiClient *client.Client, printer output.Printer) error {
-	content, err := resolveWriteContent(c.Content)
+	content, err := resolveWriteContent()
 	if err != nil {
 		return err
 	}

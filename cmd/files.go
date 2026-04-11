@@ -195,7 +195,6 @@ type FilesMkdirCmd struct {
 
 type FilesWriteCmd struct {
 	Path      string `arg:"" help:"Remote path."`
-	Content   string `help:"File contents. Reads stdin when omitted."`
 	Overwrite bool   `help:"Overwrite an existing file."`
 }
 
@@ -293,9 +292,9 @@ type favoriteFoldersResponse struct {
 
 type favoriteFolderMutationResponse struct {
 	Data struct {
-		AddFavoriteFolder      api.FavoriteFolder `json:"addFavoriteFolder"`
-		RemoveFavoriteFolder   api.FavoriteFolder `json:"removeFavoriteFolder"`
-		SetFavoriteFolderAlias api.FavoriteFolder `json:"setFavoriteFolderAlias"`
+		AddFavoriteFolder      []api.FavoriteFolder `json:"addFavoriteFolder"`
+		RemoveFavoriteFolder   []api.FavoriteFolder `json:"removeFavoriteFolder"`
+		SetFavoriteFolderAlias []api.FavoriteFolder `json:"setFavoriteFolderAlias"`
 	} `json:"data"`
 }
 
@@ -441,13 +440,13 @@ func (c *FilesRecentCmd) Run(cli *CLI, apiClient *client.Client, printer output.
 }
 
 func (c *FilesInfoCmd) Run(apiClient *client.Client, printer output.Printer) error {
-	dir, fileName := splitRemotePath(c.Path)
+	_, fileName := splitRemotePath(c.Path)
 
 	var resp fileInfoResponse
 	if err := apiClient.GraphQL(context.Background(), fileInfoQuery, map[string]any{
 		"fileName": fileName,
 		"id":       "",
-		"path":     dir,
+		"path":     path.Clean(c.Path),
 	}, &resp); err != nil {
 		return fmt.Errorf("query file info: %w", err)
 	}
@@ -467,7 +466,7 @@ func (c *FilesMkdirCmd) Run(apiClient *client.Client, printer output.Printer) er
 }
 
 func (c *FilesWriteCmd) Run(apiClient *client.Client, printer output.Printer) error {
-	content, err := resolveWriteContent(c.Content)
+	content, err := resolveWriteContent()
 	if err != nil {
 		return err
 	}
@@ -637,7 +636,7 @@ func (c *FilesFavoritesAddCmd) Run(apiClient *client.Client, printer output.Prin
 		return fmt.Errorf("add favorite folder: %w", err)
 	}
 
-	return printer.Print(resp.Data.AddFavoriteFolder)
+	return printer.PrintList(resp.Data.AddFavoriteFolder)
 }
 
 func (c *FilesFavoritesRemoveCmd) Run(apiClient *client.Client, printer output.Printer) error {
@@ -648,7 +647,7 @@ func (c *FilesFavoritesRemoveCmd) Run(apiClient *client.Client, printer output.P
 		return fmt.Errorf("remove favorite folder: %w", err)
 	}
 
-	return printer.Print(resp.Data.RemoveFavoriteFolder)
+	return printer.PrintList(resp.Data.RemoveFavoriteFolder)
 }
 
 func (c *FilesFavoritesAliasCmd) Run(apiClient *client.Client, printer output.Printer) error {
@@ -660,7 +659,7 @@ func (c *FilesFavoritesAliasCmd) Run(apiClient *client.Client, printer output.Pr
 		return fmt.Errorf("set favorite folder alias: %w", err)
 	}
 
-	return printer.Print(resp.Data.SetFavoriteFolderAlias)
+	return printer.PrintList(resp.Data.SetFavoriteFolderAlias)
 }
 
 func listFiles(
@@ -723,11 +722,7 @@ func fetchFilesPage(
 	return resp.Data.Files, nil
 }
 
-func resolveWriteContent(content string) (string, error) {
-	if content != "" {
-		return content, nil
-	}
-
+func resolveWriteContent() (string, error) {
 	data, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		return "", fmt.Errorf("read stdin: %w", err)

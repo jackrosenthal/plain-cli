@@ -40,7 +40,11 @@ func EncodeFileID(sessionKey []byte, path, mediaID string) (string, error) {
 }
 
 func DownloadFile(ctx context.Context, c *Client, path, mediaID string) (io.ReadCloser, error) {
-	fileID, err := EncodeFileID(c.SessionKey, path, mediaID)
+	key := c.URLTokenKey
+	if len(key) == 0 {
+		key = c.SessionKey
+	}
+	fileID, err := EncodeFileID(key, path, mediaID)
 	if err != nil {
 		return nil, err
 	}

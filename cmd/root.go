@@ -69,6 +69,9 @@ func (c *CLI) AfterApply(ctx *kong.Context) error {
 	if err := apiClient.FetchServerTimeOffset(context.Background()); err != nil {
 		return fmt.Errorf("fetch server time offset: %w", err)
 	}
+	if err := apiClient.FetchURLToken(context.Background()); err != nil {
+		return fmt.Errorf("fetch url token: %w", err)
+	}
 
 	ctx.Bind(apiClient)
 

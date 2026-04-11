@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,9 +25,10 @@ var (
 )
 
 type Client struct {
-	Host       string
-	ClientID   string
-	SessionKey []byte
+	Host        string
+	ClientID    string
+	SessionKey  []byte
+	URLTokenKey []byte
 
 	serverTimeOffset int64
 	httpClient       *http.Client
@@ -92,6 +94,25 @@ func (c *Client) FetchServerTimeOffset(ctx context.Context) error {
 
 	c.serverTimeOffset = serverTimeMS - time.Now().UnixMilli()
 
+	return nil
+}
+
+func (c *Client) FetchURLToken(ctx context.Context) error {
+	var resp struct {
+		Data struct {
+			App struct {
+				URLToken string `json:"urlToken"`
+			} `json:"app"`
+		} `json:"data"`
+	}
+	if err := c.GraphQL(ctx, `query { app { urlToken } }`, nil, &resp); err != nil {
+		return err
+	}
+	key, err := base64.StdEncoding.DecodeString(resp.Data.App.URLToken)
+	if err != nil {
+		return fmt.Errorf("decode url token: %w", err)
+	}
+	c.URLTokenKey = key
 	return nil
 }
 
