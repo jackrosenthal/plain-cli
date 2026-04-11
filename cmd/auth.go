@@ -40,8 +40,15 @@ func (c *AuthLoginCmd) Run(cli *CLI, printer output.Printer) error {
 	if err != nil {
 		return err
 	}
-	if err := requireHost(cfg.Host); err != nil {
-		return err
+
+	if cfg.Host == "" {
+		cfg.Host, err = promptText("Plain URL:")
+		if err != nil {
+			return err
+		}
+		if err := requireHost(cfg.Host); err != nil {
+			return err
+		}
 	}
 
 	password := ""
@@ -140,15 +147,25 @@ type passwordPromptModel struct {
 	canceled bool
 }
 
-func newPasswordPromptModel() passwordPromptModel {
+func newPromptModel(prompt, placeholder string, echoMode textinput.EchoMode) passwordPromptModel {
 	input := textinput.New()
-	input.Placeholder = "Password"
-	input.Prompt = "Password: "
-	input.EchoMode = textinput.EchoPassword
-	input.EchoCharacter = '*'
+	input.Placeholder = placeholder
+	input.Prompt = prompt + " "
+	input.EchoMode = echoMode
+	if echoMode == textinput.EchoPassword {
+		input.EchoCharacter = '*'
+	}
 	input.Focus()
 
 	return passwordPromptModel{input: input}
+}
+
+func newPasswordPromptModel() passwordPromptModel {
+	return newPromptModel("Password:", "Password", textinput.EchoPassword)
+}
+
+func newTextPromptModel(prompt string) passwordPromptModel {
+	return newPromptModel(prompt, "", textinput.EchoNormal)
 }
 
 func (m passwordPromptModel) Init() tea.Cmd {
@@ -193,4 +210,22 @@ func promptPassword() (string, error) {
 	}
 
 	return result.value, nil
+}
+
+func promptText(prompt string) (string, error) {
+	program := tea.NewProgram(newTextPromptModel(prompt))
+	model, err := program.Run()
+	if err != nil {
+		return "", err
+	}
+
+	result, ok := model.(passwordPromptModel)
+	if !ok {
+		return "", errors.New("unexpected text prompt result")
+	}
+	if result.canceled {
+		return "", errors.New("text prompt canceled")
+	}
+
+	return strings.TrimSpace(result.value), nil
 }
