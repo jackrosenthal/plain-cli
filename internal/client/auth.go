@@ -33,36 +33,36 @@ type loginResponse struct {
 	Token  string `json:"token"`
 }
 
-func CheckToken(ctx context.Context, host, clientID string, sessionKey []byte) (valid bool, err error) {
+func InitLogin(ctx context.Context, host, clientID string, sessionKey []byte) (valid bool, prefilledPassword string, err error) {
 	endpoint, err := resolveHTTPEndpoint(host, "/init")
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 
 	var body io.Reader = http.NoBody
 	if sessionKey != nil {
 		tokenProbeID, err := randomUUID()
 		if err != nil {
-			return false, err
+			return false, "", err
 		}
 
 		payload, err := Encrypt(sessionKey, []byte(tokenProbeID))
 		if err != nil {
-			return false, err
+			return false, "", err
 		}
 		body = bytes.NewReader(payload)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, body)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	req.Header.Set("c-id", clientID)
 	req.Header.Set("Content-Type", initContentType)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	defer func() {
 		_ = resp.Body.Close()
@@ -71,17 +71,26 @@ func CheckToken(ctx context.Context, host, clientID string, sessionKey []byte) (
 	switch resp.StatusCode {
 	case http.StatusOK:
 	case http.StatusForbidden:
-		return false, errors.New("web access disabled on this device")
+		return false, "", errors.New("web access disabled on this device")
 	default:
-		return false, fmt.Errorf("init request failed with status %d", resp.StatusCode)
+		return false, "", fmt.Errorf("init request failed with status %d", resp.StatusCode)
 	}
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 
-	return len(respBody) == 0, nil
+	if len(respBody) == 0 {
+		return true, "", nil
+	}
+
+	return false, string(respBody), nil
+}
+
+func CheckToken(ctx context.Context, host, clientID string, sessionKey []byte) (valid bool, err error) {
+	valid, _, err = InitLogin(ctx, host, clientID, sessionKey)
+	return valid, err
 }
 
 func Login(ctx context.Context, host, clientID, password string, onPending ...func()) (token string, err error) {

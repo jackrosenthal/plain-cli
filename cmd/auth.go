@@ -57,6 +57,11 @@ func (c *AuthLoginCmd) Run(cli *CLI, printer output.Printer) error {
 		if err != nil {
 			return err
 		}
+	} else {
+		_, password, err = client.InitLogin(context.Background(), cfg.Host, cfg.ClientID, nil)
+		if err != nil {
+			return err
+		}
 	}
 
 	token, err := client.Login(context.Background(), cfg.Host, cfg.ClientID, password, func() {
