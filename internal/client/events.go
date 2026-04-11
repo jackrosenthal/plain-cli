@@ -76,7 +76,7 @@ type MessagePayload struct {
 	Date           string                     `json:"date"`
 	Type           int                        `json:"type"`
 	ThreadID       string                     `json:"threadId"`
-	SubscriptionID string                     `json:"subscriptionId"`
+	SubscriptionID int                        `json:"subscriptionId"`
 	IsMMS          bool                       `json:"isMms"`
 	Attachments    []MessageAttachmentPayload `json:"attachments"`
 	Tags           []TagPayload               `json:"tags"`

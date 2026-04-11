@@ -227,7 +227,7 @@ type FeedEntry {
 
 type Message {
   id: ID!, body: String!, address: String!, serviceCenter: String
-  date: String!, type: Int!, threadId: String!, subscriptionId: String
+  date: String!, type: Int!, threadId: String!, subscriptionId: Int
   isMms: Boolean!
   attachments: [{ path: String!, contentType: String!, name: String }]
   tags: [Tag!]!
