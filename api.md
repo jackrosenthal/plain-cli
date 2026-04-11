@@ -591,6 +591,7 @@ mutation copyFile($src: String!, $dst: String!, $overwrite: Boolean!) { copyFile
 mutation moveFile($src: String!, $dst: String!, $overwrite: Boolean!) { moveFile(src: $src, dst: $dst, overwrite: $overwrite) }
 mutation deleteFiles($paths: [String!]!) { deleteFiles(paths: $paths) }
 # After uploading all chunks via /upload_chunk:
+# Returns: String — final path of the assembled file on the device
 mutation mergeChunks($fileId: String!, $totalChunks: Int!, $path: String!, $replace: Boolean!, $isAppFile: Boolean!) {
   mergeChunks(fileId: $fileId, totalChunks: $totalChunks, path: $path, replace: $replace, isAppFile: $isAppFile)
 }
@@ -785,11 +786,32 @@ This avoids CORS and TLS certificate issues when accessing peer devices.
 
 ## File Upload
 
-### Single chunk (`POST /upload`)
+Both endpoints use `multipart/form-data` with two parts. The server (Ktor) only processes `PartData.FileItem` parts, so both parts **must** have a `filename` attribute in their `Content-Disposition` header.
 
-For small files. Body is `multipart/form-data` with a single `file` field.
+### Single file (`POST /upload`)
+
+For files ≤ 5 MB.
+
+```
+POST /upload
+Content-Type: multipart/form-data
+c-id: <client_id>
+
+FormData fields:
+  info  → binary ciphertext: encrypt(session_key, json_string)  [Content-Disposition: ...; filename="blob"]
+  file  → file bytes  [Content-Disposition: ...; filename="<filename>"]
+```
+
+Where `json_string` is:
+```json
+{ "dir": "/storage/emulated/0/Download", "replace": false, "isAppFile": false, "size": 12345 }
+```
+
+Response: HTTP 201, body is the final filename on the device.
 
 ### Chunked upload (`POST /upload_chunk`)
+
+For files > 5 MB.
 
 ```
 POST /upload_chunk
@@ -797,20 +819,22 @@ Content-Type: multipart/form-data
 c-id: <client_id>
 
 FormData fields:
-  info  → binary ciphertext: encrypt(session_key, json_string)
-  file  → Blob (raw bytes for this chunk)
+  info  → binary ciphertext: encrypt(session_key, json_string)  [Content-Disposition: ...; filename="blob"]
+  file  → Blob (raw bytes for this chunk)  [Content-Disposition: ...; filename="<original_filename>"]
 ```
 
 Where `json_string` is:
 ```json
-{ "fileId": "<file_id>", "index": 0, "size": 1048576 }
+{ "fileId": "<file_id>", "index": 0, "size": 5242880 }
 ```
 
 - `fileId` — stable identifier for the upload session, derived from file metadata + SHA-256 hash.
 - `index` — zero-based chunk index.
 - `size` — byte count of this chunk.
 
-Typical chunk size: ~1 MB. Up to 3 chunks upload in parallel.
+Response: HTTP 201, body is `"<index>:<savedSize>"`.
+
+Chunk size: 5 MB. Up to 3 chunks upload in parallel.
 
 After all chunks are confirmed (via `uploadedChunks` query), call the `mergeChunks` GraphQL mutation to assemble the file on the device.
 

@@ -105,18 +105,6 @@ const (
   }
 }`
 
-	writeTextFileMutation = `mutation writeTextFile($path: String!, $content: String!, $overwrite: Boolean!) {
-  writeTextFile(path: $path, content: $content, overwrite: $overwrite) {
-    path
-    isDir
-    size
-    createdAt
-    updatedAt
-    children
-    mediaId
-  }
-}`
-
 	renameFileMutation = `mutation renameFile($path: String!, $name: String!) {
   renameFile(path: $path, name: $name)
 }`
@@ -165,13 +153,12 @@ type FilesCmd struct {
 	Recent    FilesRecentCmd    `cmd:"" help:"List recent files."`
 	Info      FilesInfoCmd      `cmd:"" help:"Show file metadata."`
 	Mkdir     FilesMkdirCmd     `cmd:"" help:"Create a directory."`
-	Write     FilesWriteCmd     `cmd:"" help:"Write a text file."`
+	Get       FilesGetCmd       `cmd:"" help:"Download a file."`
+	Put       FilesPutCmd       `cmd:"" help:"Upload a file."`
 	Rename    FilesRenameCmd    `cmd:"" help:"Rename a file or directory."`
 	Copy      FilesCopyCmd      `cmd:"" help:"Copy a file or directory."`
 	Move      FilesMoveCmd      `cmd:"" help:"Move a file or directory."`
 	Delete    FilesDeleteCmd    `cmd:"" help:"Delete files or directories."`
-	Download  FilesDownloadCmd  `cmd:"" help:"Download a file."`
-	Upload    FilesUploadCmd    `cmd:"" help:"Upload a file."`
 	Favorites FilesFavoritesCmd `cmd:"" help:"Manage favorite folders."`
 }
 
@@ -193,9 +180,14 @@ type FilesMkdirCmd struct {
 	Path string `arg:"" help:"Directory path to create."`
 }
 
-type FilesWriteCmd struct {
-	Path      string `arg:"" help:"Remote path."`
-	Overwrite bool   `help:"Overwrite an existing file."`
+type FilesGetCmd struct {
+	RemotePath string `arg:"" help:"Remote path."`
+	LocalPath  string `arg:"" optional:"" help:"Local destination path, or - for stdout. Defaults to remote filename in current directory."`
+}
+
+type FilesPutCmd struct {
+	Source     string `arg:"" help:"Local file path, or - for stdin."`
+	RemotePath string `arg:"" help:"Remote destination path."`
 }
 
 type FilesRenameCmd struct {
@@ -217,16 +209,6 @@ type FilesMoveCmd struct {
 
 type FilesDeleteCmd struct {
 	Paths []string `arg:"" help:"Paths to delete."`
-}
-
-type FilesDownloadCmd struct {
-	Path string `arg:"" help:"Remote path."`
-	Out  string `help:"Local output path. Writes to stdout when omitted."`
-}
-
-type FilesUploadCmd struct {
-	LocalPath  string `arg:"" help:"Local file path."`
-	RemotePath string `arg:"" help:"Remote destination path."`
 }
 
 type FilesFavoritesCmd struct {
@@ -273,12 +255,6 @@ type fileInfoResponse struct {
 type createDirResponse struct {
 	Data struct {
 		CreateDir api.File `json:"createDir"`
-	} `json:"data"`
-}
-
-type writeTextFileResponse struct {
-	Data struct {
-		WriteTextFile api.File `json:"writeTextFile"`
 	} `json:"data"`
 }
 
@@ -465,22 +441,89 @@ func (c *FilesMkdirCmd) Run(apiClient *client.Client, printer output.Printer) er
 	return printer.Print(resp.Data.CreateDir)
 }
 
-func (c *FilesWriteCmd) Run(apiClient *client.Client, printer output.Printer) error {
-	content, err := resolveWriteContent()
+func (c *FilesGetCmd) Run(cli *CLI, apiClient *client.Client, printer output.Printer) error {
+	reader, err := client.DownloadFile(context.Background(), apiClient, c.RemotePath, "")
+	if err != nil {
+		return fmt.Errorf("download file: %w", err)
+	}
+	defer func() {
+		_ = reader.Close()
+	}()
+
+	dest := c.LocalPath
+	if dest == "-" {
+		_, err = io.Copy(os.Stdout, reader)
+		return err
+	}
+	if dest == "" {
+		dest = path.Base(c.RemotePath)
+	}
+
+	file, err := os.Create(dest)
 	if err != nil {
 		return err
 	}
+	defer func() {
+		_ = file.Close()
+	}()
 
-	var resp writeTextFileResponse
-	if err := apiClient.GraphQL(context.Background(), writeTextFileMutation, map[string]any{
-		"content":   content,
-		"overwrite": c.Overwrite,
-		"path":      c.Path,
-	}, &resp); err != nil {
-		return fmt.Errorf("write text file: %w", err)
+	var w io.Writer = file
+	if shouldShowTransferProgress(cli) {
+		w = &progressWriter{label: dest, w: file}
 	}
 
-	return printer.Print(resp.Data.WriteTextFile)
+	if _, err := io.Copy(w, reader); err != nil {
+		return err
+	}
+
+	if pw, ok := w.(*progressWriter); ok {
+		pw.Finish()
+	}
+
+	return printer.Print(mutationStatus{
+		Status:  "ok",
+		Message: fmt.Sprintf("Downloaded to %s.", dest),
+	})
+}
+
+func (c *FilesPutCmd) Run(cli *CLI, apiClient *client.Client, printer output.Printer) error {
+	localPath := c.Source
+
+	if c.Source == "-" {
+		tmp, err := os.CreateTemp("", "plain-put-*")
+		if err != nil {
+			return fmt.Errorf("create temp file: %w", err)
+		}
+		tmpName := tmp.Name()
+		defer func() {
+			_ = tmp.Close()
+			_ = os.Remove(tmpName)
+		}()
+
+		if _, err := io.Copy(tmp, os.Stdin); err != nil {
+			return fmt.Errorf("read stdin: %w", err)
+		}
+		if err := tmp.Close(); err != nil {
+			return err
+		}
+		localPath = tmpName
+	}
+
+	var progress func(done, total int64)
+	if shouldShowTransferProgress(cli) {
+		renderer := &uploadProgressRenderer{label: c.RemotePath}
+		progress = renderer.Update
+		defer renderer.Finish()
+	}
+
+	if err := client.Upload(context.Background(), apiClient, localPath, c.RemotePath, progress); err != nil {
+		return fmt.Errorf("upload: %w", err)
+	}
+
+	return printer.Print(mutationStatus{
+		Status:  "ok",
+		Message: fmt.Sprintf("Uploaded to %s.", c.RemotePath),
+	})
 }
 
 func (c *FilesRenameCmd) Run(apiClient *client.Client, printer output.Printer) error {
@@ -553,68 +596,6 @@ func (c *FilesDeleteCmd) Run(apiClient *client.Client, printer output.Printer) e
 	return printer.Print(mutationStatus{
 		Status:  "ok",
 		Message: fmt.Sprintf("Deleted %d path(s).", len(c.Paths)),
-	})
-}
-
-func (c *FilesDownloadCmd) Run(cli *CLI, apiClient *client.Client, printer output.Printer) error {
-	reader, err := client.DownloadFile(context.Background(), apiClient, c.Path, "")
-	if err != nil {
-		return fmt.Errorf("download file: %w", err)
-	}
-	defer func() {
-		_ = reader.Close()
-	}()
-
-	if c.Out == "" {
-		_, err = io.Copy(os.Stdout, reader)
-		return err
-	}
-
-	file, err := os.Create(c.Out)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = file.Close()
-	}()
-
-	writer := io.Writer(file)
-	if shouldShowTransferProgress(cli) {
-		writer = &progressWriter{
-			label: c.Out,
-			w:     file,
-		}
-	}
-
-	if _, err := io.Copy(writer, reader); err != nil {
-		return err
-	}
-
-	if pw, ok := writer.(*progressWriter); ok {
-		pw.Finish()
-	}
-
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Downloaded to %s.", c.Out),
-	})
-}
-
-func (c *FilesUploadCmd) Run(cli *CLI, apiClient *client.Client, printer output.Printer) error {
-	var progress func(done, total int64)
-	if shouldShowTransferProgress(cli) {
-		renderer := &uploadProgressRenderer{label: c.RemotePath}
-		progress = renderer.Update
-		defer renderer.Finish()
-	}
-
-	if err := client.Upload(context.Background(), apiClient, c.LocalPath, c.RemotePath, progress); err != nil {
-		return fmt.Errorf("upload file: %w", err)
-	}
-
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Uploaded %s to %s.", c.LocalPath, c.RemotePath),
 	})
 }
 
@@ -720,15 +701,6 @@ func fetchFilesPage(
 	}
 
 	return resp.Data.Files, nil
-}
-
-func resolveWriteContent() (string, error) {
-	data, err := io.ReadAll(os.Stdin)
-	if err != nil {
-		return "", fmt.Errorf("read stdin: %w", err)
-	}
-
-	return string(data), nil
 }
 
 func splitRemotePath(remotePath string) (string, string) {

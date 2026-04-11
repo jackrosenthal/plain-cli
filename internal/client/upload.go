@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	uploadChunkSize     int64 = 1 << 20
+	uploadChunkSize     int64 = 5 << 20 // 5 MB — matches web app threshold
 	uploadConcurrency         = 3
 	queryUploadedChunks       = `query uploadedChunks($fileId: String!) { uploadedChunks(fileId: $fileId) }`
 	mutationMergeChunks       = `mutation mergeChunks($fileId: String!, $totalChunks: Int!, $path: String!, $replace: Boolean!, $isAppFile: Boolean!) {
@@ -41,7 +41,7 @@ type uploadedChunksResponse struct {
 
 type mergeChunksResponse struct {
 	Data struct {
-		MergeChunks bool `json:"mergeChunks"`
+		MergeChunks string `json:"mergeChunks"`
 	} `json:"data"`
 }
 
@@ -68,12 +68,13 @@ func Upload(ctx context.Context, c *Client, localPath, remotePath string, progre
 		return fmt.Errorf("upload requires a regular file: %s", localPath)
 	}
 
+	totalSize := info.Size()
+
 	fileID, err := buildUploadFileID(file, info)
 	if err != nil {
 		return err
 	}
 
-	totalSize := info.Size()
 	totalChunks := chunkCount(totalSize)
 
 	uploaded, err := fetchUploadedChunks(ctx, c, fileID)
@@ -176,8 +177,8 @@ sendLoop:
 	}, &mergeResp); err != nil {
 		return err
 	}
-	if !mergeResp.Data.MergeChunks {
-		return errors.New("mergeChunks returned false")
+	if mergeResp.Data.MergeChunks == "" {
+		return errors.New("mergeChunks returned empty path")
 	}
 
 	return nil
@@ -241,7 +242,7 @@ func uploadChunk(ctx context.Context, c *Client, file *os.File, fileID string, j
 	writer := multipart.NewWriter(&body)
 
 	infoPart, err := writer.CreatePart(textproto.MIMEHeader{
-		"Content-Disposition": []string{`form-data; name="info"`},
+		"Content-Disposition": []string{`form-data; name="info"; filename="blob"`},
 		"Content-Type":        []string{"application/octet-stream"},
 	})
 	if err != nil {
@@ -287,7 +288,7 @@ func uploadChunk(ctx context.Context, c *Client, file *os.File, fileID string, j
 	}()
 
 	switch resp.StatusCode {
-	case http.StatusOK:
+	case http.StatusOK, http.StatusCreated:
 		return nil
 	case http.StatusUnauthorized:
 		return ErrUnauthorized

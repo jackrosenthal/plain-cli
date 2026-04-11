@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 
 	"github.com/jackrosenthal/plain-cli/internal/api"
 	"github.com/jackrosenthal/plain-cli/internal/client"
@@ -184,10 +186,11 @@ func (c *NotesGetCmd) Run(apiClient *client.Client, printer output.Printer) erro
 }
 
 func (c *NotesSaveCmd) Run(apiClient *client.Client, printer output.Printer) error {
-	content, err := resolveWriteContent()
+	data, err := io.ReadAll(os.Stdin)
 	if err != nil {
-		return err
+		return fmt.Errorf("read stdin: %w", err)
 	}
+	content := string(data)
 
 	id := c.ID
 	if id == "" {
