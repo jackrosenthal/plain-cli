@@ -132,9 +132,9 @@ plain
 │   ├── info <path>
 │   ├── mkdir <path>
 │   ├── write <path> [--content <text>] [--overwrite]   # reads stdin if no --content
-│   ├── rename <path> <name>
+│   ├── mv [-n] [-T] <src> <dst>                         # Unix-style move/rename; moves
+│   │                                                   #   into <dst> if it is a dir
 │   ├── copy <src> <dst> [--overwrite]
-│   ├── move <src> <dst> [--overwrite]
 │   ├── delete <paths...>
 │   ├── download <path> [--out <local-path>]            # GET /fs, streams to file or stdout
 │   ├── upload <local-path> <remote-path>               # chunked upload + mergeChunks

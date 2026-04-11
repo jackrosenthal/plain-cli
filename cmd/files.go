@@ -105,10 +105,6 @@ const (
   }
 }`
 
-	renameFileMutation = `mutation renameFile($path: String!, $name: String!) {
-  renameFile(path: $path, name: $name)
-}`
-
 	copyFileMutation = `mutation copyFile($src: String!, $dst: String!, $overwrite: Boolean!) {
   copyFile(src: $src, dst: $dst, overwrite: $overwrite)
 }`
@@ -155,9 +151,8 @@ type FilesCmd struct {
 	Mkdir     FilesMkdirCmd     `cmd:"" help:"Create a directory."`
 	Get       FilesGetCmd       `cmd:"" help:"Download a file."`
 	Put       FilesPutCmd       `cmd:"" help:"Upload a file."`
-	Rename    FilesRenameCmd    `cmd:"" help:"Rename a file or directory."`
+	Mv        FilesMvCmd        `cmd:"mv" help:"Move or rename a file or directory."`
 	Copy      FilesCopyCmd      `cmd:"" help:"Copy a file or directory."`
-	Move      FilesMoveCmd      `cmd:"" help:"Move a file or directory."`
 	Delete    FilesDeleteCmd    `cmd:"" help:"Delete files or directories."`
 	Favorites FilesFavoritesCmd `cmd:"" help:"Manage favorite folders."`
 }
@@ -190,21 +185,17 @@ type FilesPutCmd struct {
 	RemotePath string `arg:"" help:"Remote destination path."`
 }
 
-type FilesRenameCmd struct {
-	Path string `arg:"" help:"Existing remote path."`
-	Name string `arg:"" help:"New name."`
-}
-
 type FilesCopyCmd struct {
 	Src       string `arg:"" help:"Source path."`
 	Dst       string `arg:"" help:"Destination path."`
 	Overwrite bool   `help:"Overwrite an existing destination."`
 }
 
-type FilesMoveCmd struct {
-	Src       string `arg:"" help:"Source path."`
-	Dst       string `arg:"" help:"Destination path."`
-	Overwrite bool   `help:"Overwrite an existing destination."`
+type FilesMvCmd struct {
+	Src               string `arg:"" help:"Source path."`
+	Dst               string `arg:"" help:"Destination path."`
+	NoClobber         bool   `name:"no-clobber" short:"n" help:"Do not overwrite an existing destination."`
+	NoTargetDirectory bool   `name:"no-target-directory" short:"T" help:"Treat the destination as a file path even if it exists as a directory."`
 }
 
 type FilesDeleteCmd struct {
@@ -526,24 +517,6 @@ func (c *FilesPutCmd) Run(cli *CLI, apiClient *client.Client, printer output.Pri
 	})
 }
 
-func (c *FilesRenameCmd) Run(apiClient *client.Client, printer output.Printer) error {
-	var resp boolMutationResponse
-	if err := apiClient.GraphQL(context.Background(), renameFileMutation, map[string]any{
-		"name": c.Name,
-		"path": c.Path,
-	}, &resp); err != nil {
-		return fmt.Errorf("rename file: %w", err)
-	}
-	if !resp.Data.RenameFile {
-		return errors.New("rename file: mutation returned false")
-	}
-
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: "File renamed.",
-	})
-}
-
 func (c *FilesCopyCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp boolMutationResponse
 	if err := apiClient.GraphQL(context.Background(), copyFileMutation, map[string]any{
@@ -563,22 +536,45 @@ func (c *FilesCopyCmd) Run(apiClient *client.Client, printer output.Printer) err
 	})
 }
 
-func (c *FilesMoveCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *FilesMvCmd) Run(apiClient *client.Client, printer output.Printer) error {
+	src := path.Clean(c.Src)
+	dst, err := resolveMvDestination(context.Background(), apiClient, src, c.Dst, c.NoTargetDirectory)
+	if err != nil {
+		return err
+	}
+
+	if dst == src {
+		return errors.New("mv: source and destination are the same path")
+	}
+
+	if c.NoClobber {
+		existing, err := remoteFileAtPath(context.Background(), apiClient, dst)
+		if err != nil {
+			return err
+		}
+		if existing != nil {
+			return printer.Print(mutationStatus{
+				Status:  "ok",
+				Message: "Destination exists; nothing moved.",
+			})
+		}
+	}
+
 	var resp boolMutationResponse
 	if err := apiClient.GraphQL(context.Background(), moveFileMutation, map[string]any{
-		"dst":       c.Dst,
-		"overwrite": c.Overwrite,
-		"src":       c.Src,
+		"dst":       dst,
+		"overwrite": !c.NoClobber,
+		"src":       src,
 	}, &resp); err != nil {
-		return fmt.Errorf("move file: %w", err)
+		return fmt.Errorf("mv: %w", err)
 	}
 	if !resp.Data.MoveFile {
-		return errors.New("move file: mutation returned false")
+		return errors.New("mv: mutation returned false")
 	}
 
 	return printer.Print(mutationStatus{
 		Status:  "ok",
-		Message: "File moved.",
+		Message: "Moved.",
 	})
 }
 
@@ -711,6 +707,46 @@ func splitRemotePath(remotePath string) (string, string) {
 	}
 
 	return dir, path.Base(cleaned)
+}
+
+func resolveMvDestination(ctx context.Context, apiClient *client.Client, src, dst string, noTargetDirectory bool) (string, error) {
+	cleanedDst := path.Clean(dst)
+	if !noTargetDirectory {
+		existing, err := remoteFileAtPath(ctx, apiClient, cleanedDst)
+		if err != nil {
+			return "", err
+		}
+		if existing != nil && existing.IsDir {
+			return path.Join(cleanedDst, path.Base(src)), nil
+		}
+		if strings.HasSuffix(dst, "/") {
+			return "", fmt.Errorf("mv: destination directory does not exist: %s", dst)
+		}
+	}
+
+	return cleanedDst, nil
+}
+
+func remoteFileAtPath(ctx context.Context, apiClient *client.Client, remotePath string) (*api.File, error) {
+	dir, _ := splitRemotePath(remotePath)
+	if dir == "" {
+		dir = "/"
+	}
+
+	files, err := listFiles(ctx, apiClient, dir, "", api.FileSortByName, 0, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	cleaned := path.Clean(remotePath)
+	for _, file := range files {
+		if path.Clean(file.Path) == cleaned {
+			match := file
+			return &match, nil
+		}
+	}
+
+	return nil, nil
 }
 
 func shouldShowTransferProgress(cli *CLI) bool {
