@@ -55,6 +55,7 @@ func (c *CLI) AfterApply(ctx *kong.Context) error {
 	}
 
 	printer := output.New(c.Output, os.Stdout)
+	ctx.Bind(c)
 	ctx.Bind(printer)
 
 	if skipClientForCommand(ctx.Command()) {
