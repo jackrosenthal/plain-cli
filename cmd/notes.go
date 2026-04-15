@@ -2,13 +2,12 @@ package cmd
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 
+	"github.com/google/uuid"
 	"github.com/jackrosenthal/plain-cli/internal/api"
 	"github.com/jackrosenthal/plain-cli/internal/client"
 	"github.com/jackrosenthal/plain-cli/internal/output"
@@ -194,10 +193,11 @@ func (c *NotesSaveCmd) Run(apiClient *client.Client, printer output.Printer) err
 
 	id := c.ID
 	if id == "" {
-		id, err = randomUUID()
+		u, err := uuid.NewRandom()
 		if err != nil {
 			return fmt.Errorf("generate note id: %w", err)
 		}
+		id = u.String()
 	}
 
 	var resp noteMutationResponse
@@ -329,29 +329,6 @@ func runNotesBoolMutation(ctx context.Context, apiClient *client.Client, mutatio
 	}
 
 	return nil
-}
-
-func randomUUID() (string, error) {
-	var raw [16]byte
-	if _, err := rand.Read(raw[:]); err != nil {
-		return "", err
-	}
-
-	raw[6] = (raw[6] & 0x0f) | 0x40
-	raw[8] = (raw[8] & 0x3f) | 0x80
-
-	var dst [36]byte
-	hex.Encode(dst[0:8], raw[0:4])
-	dst[8] = '-'
-	hex.Encode(dst[9:13], raw[4:6])
-	dst[13] = '-'
-	hex.Encode(dst[14:18], raw[6:8])
-	dst[18] = '-'
-	hex.Encode(dst[19:23], raw[8:10])
-	dst[23] = '-'
-	hex.Encode(dst[24:36], raw[10:16])
-
-	return string(dst[:]), nil
 }
 
 func displayNotes(notes []noteListRecord) []noteListItem {
