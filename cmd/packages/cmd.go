@@ -1,4 +1,4 @@
-package cmd
+package packages
 
 import (
 	"context"
@@ -46,24 +46,24 @@ const (
 }`
 )
 
-type PackagesCmd struct {
-	LS        PackagesLSCmd        `cmd:"" help:"List installed packages."`
-	Install   PackagesInstallCmd   `cmd:"" help:"Install a package from the device."`
-	Uninstall PackagesUninstallCmd `cmd:"" help:"Uninstall packages."`
+type Cmd struct {
+	LS        LSCmd        `cmd:"" help:"List installed packages."`
+	Install   InstallCmd   `cmd:"" help:"Install a package from the device."`
+	Uninstall UninstallCmd `cmd:"" help:"Uninstall packages."`
 }
 
-type PackagesLSCmd struct {
+type LSCmd struct {
 	Query  string `help:"Search query."`
 	Sort   string `help:"Sort field."`
 	Limit  int    `help:"Maximum number of results to return."`
 	Offset int    `help:"Number of results to skip."`
 }
 
-type PackagesInstallCmd struct {
+type InstallCmd struct {
 	DevicePath string `arg:"" help:"Device path to the package file."`
 }
 
-type PackagesUninstallCmd struct {
+type UninstallCmd struct {
 	IDs []string `arg:"" name:"ids" help:"Package IDs to uninstall."`
 }
 
@@ -86,7 +86,7 @@ type packageInstallResult struct {
 	IsNew       bool   `json:"isNew"`
 }
 
-func (c *PackagesLSCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *LSCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	packages, err := listPackages(
 		context.Background(),
 		apiClient,
@@ -102,7 +102,7 @@ func (c *PackagesLSCmd) Run(apiClient *client.Client, printer output.Printer) er
 	return printer.PrintList(packages)
 }
 
-func (c *PackagesInstallCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *InstallCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp packagesMutationResponse
 	if err := apiClient.GraphQL(context.Background(), installPackageMutation, map[string]any{
 		"path": c.DevicePath,
@@ -113,7 +113,7 @@ func (c *PackagesInstallCmd) Run(apiClient *client.Client, printer output.Printe
 	return printer.Print(resp.Data.InstallPackage)
 }
 
-func (c *PackagesUninstallCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *UninstallCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp packagesMutationResponse
 	if err := apiClient.GraphQL(context.Background(), uninstallPackagesMutation, map[string]any{
 		"ids": c.IDs,
@@ -124,10 +124,7 @@ func (c *PackagesUninstallCmd) Run(apiClient *client.Client, printer output.Prin
 		return errors.New("uninstall packages: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Uninstalled %d package(s).", len(c.IDs)),
-	})
+	return nil
 }
 
 func listPackages(

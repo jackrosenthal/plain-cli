@@ -1,4 +1,4 @@
-package cmd
+package files
 
 import (
 	"context"
@@ -9,16 +9,17 @@ import (
 	"path"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/progress"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/term"
 	"github.com/jackrosenthal/plain-cli/internal/api"
 	"github.com/jackrosenthal/plain-cli/internal/client"
+	"github.com/jackrosenthal/plain-cli/internal/cmdutil"
 	"github.com/jackrosenthal/plain-cli/internal/output"
 )
 
 const (
-	filesPageSize = 100
-
 	filesQuery = `query files($root: String!, $offset: Int!, $limit: Int!, $query: String!, $sortBy: FileSortBy!) {
   files(root: $root, offset: $offset, limit: $limit, query: $query, sortBy: $sortBy) {
     path
@@ -142,22 +143,20 @@ const (
 }`
 )
 
-var progressBarStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
-
-type FilesCmd struct {
-	LS        FilesLSCmd        `cmd:"" help:"List files."`
-	Recent    FilesRecentCmd    `cmd:"" help:"List recent files."`
-	Info      FilesInfoCmd      `cmd:"" help:"Show file metadata."`
-	Mkdir     FilesMkdirCmd     `cmd:"" help:"Create a directory."`
-	Get       FilesGetCmd       `cmd:"" help:"Download a file."`
-	Put       FilesPutCmd       `cmd:"" help:"Upload a file."`
-	Mv        FilesMvCmd        `cmd:"mv" help:"Move or rename a file or directory."`
-	Copy      FilesCopyCmd      `cmd:"" help:"Copy a file or directory."`
-	Delete    FilesDeleteCmd    `cmd:"" help:"Delete files or directories."`
-	Favorites FilesFavoritesCmd `cmd:"" help:"Manage favorite folders."`
+type Cmd struct {
+	LS        LSCmd        `cmd:"" help:"List files."`
+	Recent    RecentCmd    `cmd:"" help:"List recent files."`
+	Info      InfoCmd      `cmd:"" help:"Show file metadata."`
+	Mkdir     MkdirCmd     `cmd:"" help:"Create a directory."`
+	Get       GetCmd       `cmd:"" help:"Download a file."`
+	Put       PutCmd       `cmd:"" help:"Upload a file."`
+	Mv        MvCmd        `cmd:"mv" help:"Move or rename a file or directory."`
+	Copy      CopyCmd      `cmd:"" help:"Copy a file or directory."`
+	Delete    DeleteCmd    `cmd:"" help:"Delete files or directories."`
+	Favorites FavoritesCmd `cmd:"" help:"Manage favorite folders."`
 }
 
-type FilesLSCmd struct {
+type LSCmd struct {
 	Root   string `arg:"" help:"Root path to list."`
 	Query  string `help:"Search query."`
 	Sort   string `help:"Sort field." default:"name" enum:"name,name-desc,size,size-desc,date,date-desc"`
@@ -165,62 +164,62 @@ type FilesLSCmd struct {
 	Offset int    `help:"Number of results to skip."`
 }
 
-type FilesRecentCmd struct{}
+type RecentCmd struct{}
 
-type FilesInfoCmd struct {
+type InfoCmd struct {
 	Path string `arg:"" help:"Remote path."`
 }
 
-type FilesMkdirCmd struct {
+type MkdirCmd struct {
 	Path string `arg:"" help:"Directory path to create."`
 }
 
-type FilesGetCmd struct {
+type GetCmd struct {
 	RemotePath string `arg:"" help:"Remote path."`
 	LocalPath  string `arg:"" optional:"" help:"Local destination path, or - for stdout. Defaults to remote filename in current directory."`
 }
 
-type FilesPutCmd struct {
+type PutCmd struct {
 	Source     string `arg:"" help:"Local file path, or - for stdin."`
 	RemotePath string `arg:"" help:"Remote destination path."`
 }
 
-type FilesCopyCmd struct {
+type CopyCmd struct {
 	Src       string `arg:"" help:"Source path."`
 	Dst       string `arg:"" help:"Destination path."`
 	Overwrite bool   `help:"Overwrite an existing destination."`
 }
 
-type FilesMvCmd struct {
+type MvCmd struct {
 	Src               string `arg:"" help:"Source path."`
 	Dst               string `arg:"" help:"Destination path."`
 	NoClobber         bool   `name:"no-clobber" short:"n" help:"Do not overwrite an existing destination."`
 	NoTargetDirectory bool   `name:"no-target-directory" short:"T" help:"Treat the destination as a file path even if it exists as a directory."`
 }
 
-type FilesDeleteCmd struct {
+type DeleteCmd struct {
 	Paths []string `arg:"" help:"Paths to delete."`
 }
 
-type FilesFavoritesCmd struct {
-	LS     FilesFavoritesLSCmd     `cmd:"" help:"List favorite folders."`
-	Add    FilesFavoritesAddCmd    `cmd:"" help:"Add a favorite folder."`
-	Remove FilesFavoritesRemoveCmd `cmd:"" help:"Remove a favorite folder."`
-	Alias  FilesFavoritesAliasCmd  `cmd:"" help:"Set a favorite folder alias."`
+type FavoritesCmd struct {
+	LS     FavoritesLSCmd     `cmd:"" help:"List favorite folders."`
+	Add    FavoritesAddCmd    `cmd:"" help:"Add a favorite folder."`
+	Remove FavoritesRemoveCmd `cmd:"" help:"Remove a favorite folder."`
+	Alias  FavoritesAliasCmd  `cmd:"" help:"Set a favorite folder alias."`
 }
 
-type FilesFavoritesLSCmd struct{}
+type FavoritesLSCmd struct{}
 
-type FilesFavoritesAddCmd struct {
+type FavoritesAddCmd struct {
 	RootPath string `arg:"" help:"Favorite root path."`
 	FullPath string `arg:"" help:"Full favorite path."`
 }
 
-type FilesFavoritesRemoveCmd struct {
+type FavoritesRemoveCmd struct {
 	FullPath string `arg:"" help:"Full favorite path."`
 }
 
-type FilesFavoritesAliasCmd struct {
+type FavoritesAliasCmd struct {
 	FullPath string `arg:"" help:"Full favorite path."`
 	Alias    string `arg:"" help:"Alias to assign."`
 }
@@ -282,12 +281,7 @@ type fileInfo struct {
 	Data      interface{} `json:"data"`
 }
 
-type mutationStatus struct {
-	Status  string `json:"status"`
-	Message string `json:"message"`
-}
-
-func (c *FilesLSCmd) Run(cli *CLI, apiClient *client.Client, printer output.Printer) error {
+func (c *LSCmd) Run(cli *cmdutil.CLIContext, apiClient *client.Client, printer output.Printer) error {
 	sortBy := api.FileSortBy(c.Sort)
 	files, err := listFiles(context.Background(), apiClient, c.Root, c.Query, sortBy, c.Offset, c.Limit)
 	if err != nil {
@@ -393,7 +387,7 @@ func boolInt(b bool) int {
 	return 0
 }
 
-func (c *FilesRecentCmd) Run(cli *CLI, apiClient *client.Client, printer output.Printer) error {
+func (c *RecentCmd) Run(cli *cmdutil.CLIContext, apiClient *client.Client, printer output.Printer) error {
 	var resp filesRecentResponse
 	if err := apiClient.GraphQL(context.Background(), recentFilesQuery, nil, &resp); err != nil {
 		return fmt.Errorf("query recent files: %w", err)
@@ -406,7 +400,7 @@ func (c *FilesRecentCmd) Run(cli *CLI, apiClient *client.Client, printer output.
 	return printLSOutputFull(os.Stdout, resp.Data.RecentFiles, cli == nil || cli.Output == output.FormatTable, true)
 }
 
-func (c *FilesInfoCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *InfoCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	_, fileName := splitRemotePath(c.Path)
 
 	var resp fileInfoResponse
@@ -421,7 +415,7 @@ func (c *FilesInfoCmd) Run(apiClient *client.Client, printer output.Printer) err
 	return printer.Print(resp.Data.FileInfo)
 }
 
-func (c *FilesMkdirCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *MkdirCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp createDirResponse
 	if err := apiClient.GraphQL(context.Background(), createDirMutation, map[string]any{
 		"path": c.Path,
@@ -432,7 +426,7 @@ func (c *FilesMkdirCmd) Run(apiClient *client.Client, printer output.Printer) er
 	return printer.Print(resp.Data.CreateDir)
 }
 
-func (c *FilesGetCmd) Run(cli *CLI, apiClient *client.Client, printer output.Printer) error {
+func (c *GetCmd) Run(cli *cmdutil.CLIContext, apiClient *client.Client, printer output.Printer) error {
 	reader, err := client.DownloadFile(context.Background(), apiClient, c.RemotePath, "")
 	if err != nil {
 		return fmt.Errorf("download file: %w", err)
@@ -458,26 +452,50 @@ func (c *FilesGetCmd) Run(cli *CLI, apiClient *client.Client, printer output.Pri
 		_ = file.Close()
 	}()
 
-	var w io.Writer = file
-	if shouldShowTransferProgress(cli) {
-		w = &progressWriter{label: dest, w: file}
+	if term.IsTerminal(os.Stderr.Fd()) {
+		prog := tea.NewProgram(
+			downloadProgressModel{bar: progress.New(progress.WithDefaultGradient()), label: dest},
+			tea.WithOutput(os.Stderr),
+			tea.WithInput(nil),
+		)
+		copyDone := make(chan error, 1)
+		go func() {
+			var received int64
+			buf := make([]byte, 32*1024)
+			var copyErr error
+			for {
+				n, readErr := reader.Read(buf)
+				if n > 0 {
+					if _, writeErr := file.Write(buf[:n]); writeErr != nil {
+						copyErr = writeErr
+						break
+					}
+					received += int64(n)
+					prog.Send(downloadProgressMsg(received))
+				}
+				if readErr != nil {
+					break
+				}
+			}
+			prog.Send(downloadDoneMsg{})
+			copyDone <- copyErr
+		}()
+		if _, err := prog.Run(); err != nil {
+			return err
+		}
+		if err := <-copyDone; err != nil {
+			return err
+		}
+	} else {
+		if _, err := io.Copy(file, reader); err != nil {
+			return err
+		}
 	}
 
-	if _, err := io.Copy(w, reader); err != nil {
-		return err
-	}
-
-	if pw, ok := w.(*progressWriter); ok {
-		pw.Finish()
-	}
-
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Downloaded to %s.", dest),
-	})
+	return nil
 }
 
-func (c *FilesPutCmd) Run(cli *CLI, apiClient *client.Client, printer output.Printer) error {
+func (c *PutCmd) Run(cli *cmdutil.CLIContext, apiClient *client.Client, printer output.Printer) error {
 	localPath := c.Source
 
 	if c.Source == "-" {
@@ -500,24 +518,36 @@ func (c *FilesPutCmd) Run(cli *CLI, apiClient *client.Client, printer output.Pri
 		localPath = tmpName
 	}
 
-	var progress func(done, total int64)
-	if shouldShowTransferProgress(cli) {
-		renderer := &uploadProgressRenderer{label: c.RemotePath}
-		progress = renderer.Update
-		defer renderer.Finish()
+	var uploadErr error
+	if term.IsTerminal(os.Stderr.Fd()) {
+		prog := tea.NewProgram(
+			uploadProgressModel{bar: progress.New(progress.WithDefaultGradient()), label: c.RemotePath},
+			tea.WithOutput(os.Stderr),
+			tea.WithInput(nil),
+		)
+		uploadDone := make(chan error, 1)
+		go func() {
+			err := client.Upload(context.Background(), apiClient, localPath, c.RemotePath, func(done, total int64) {
+				prog.Send(uploadProgressMsg{done: done, total: total})
+			})
+			prog.Send(uploadDoneMsg{})
+			uploadDone <- err
+		}()
+		if _, err := prog.Run(); err != nil {
+			return err
+		}
+		uploadErr = <-uploadDone
+	} else {
+		uploadErr = client.Upload(context.Background(), apiClient, localPath, c.RemotePath, nil)
+	}
+	if uploadErr != nil {
+		return fmt.Errorf("upload: %w", uploadErr)
 	}
 
-	if err := client.Upload(context.Background(), apiClient, localPath, c.RemotePath, progress); err != nil {
-		return fmt.Errorf("upload: %w", err)
-	}
-
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Uploaded to %s.", c.RemotePath),
-	})
+	return nil
 }
 
-func (c *FilesCopyCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *CopyCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp boolMutationResponse
 	if err := apiClient.GraphQL(context.Background(), copyFileMutation, map[string]any{
 		"dst":       c.Dst,
@@ -530,13 +560,10 @@ func (c *FilesCopyCmd) Run(apiClient *client.Client, printer output.Printer) err
 		return errors.New("copy file: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: "File copied.",
-	})
+	return nil
 }
 
-func (c *FilesMvCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *MvCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	src := path.Clean(c.Src)
 	dst, err := resolveMvDestination(context.Background(), apiClient, src, c.Dst, c.NoTargetDirectory)
 	if err != nil {
@@ -553,10 +580,7 @@ func (c *FilesMvCmd) Run(apiClient *client.Client, printer output.Printer) error
 			return err
 		}
 		if existing != nil {
-			return printer.Print(mutationStatus{
-				Status:  "ok",
-				Message: "Destination exists; nothing moved.",
-			})
+			return nil
 		}
 	}
 
@@ -572,13 +596,10 @@ func (c *FilesMvCmd) Run(apiClient *client.Client, printer output.Printer) error
 		return errors.New("mv: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: "Moved.",
-	})
+	return nil
 }
 
-func (c *FilesDeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *DeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp boolMutationResponse
 	if err := apiClient.GraphQL(context.Background(), deleteFilesMutation, map[string]any{
 		"paths": c.Paths,
@@ -589,13 +610,10 @@ func (c *FilesDeleteCmd) Run(apiClient *client.Client, printer output.Printer) e
 		return errors.New("delete files: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Deleted %d path(s).", len(c.Paths)),
-	})
+	return nil
 }
 
-func (c *FilesFavoritesLSCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *FavoritesLSCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp favoriteFoldersResponse
 	if err := apiClient.GraphQL(context.Background(), favoriteFoldersQuery, nil, &resp); err != nil {
 		return fmt.Errorf("query favorite folders: %w", err)
@@ -604,7 +622,7 @@ func (c *FilesFavoritesLSCmd) Run(apiClient *client.Client, printer output.Print
 	return printer.PrintList(resp.Data.App.FavoriteFolders)
 }
 
-func (c *FilesFavoritesAddCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *FavoritesAddCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp favoriteFolderMutationResponse
 	if err := apiClient.GraphQL(context.Background(), addFavoriteFolderMutation, map[string]any{
 		"fullPath": c.FullPath,
@@ -616,7 +634,7 @@ func (c *FilesFavoritesAddCmd) Run(apiClient *client.Client, printer output.Prin
 	return printer.PrintList(resp.Data.AddFavoriteFolder)
 }
 
-func (c *FilesFavoritesRemoveCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *FavoritesRemoveCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp favoriteFolderMutationResponse
 	if err := apiClient.GraphQL(context.Background(), removeFavoriteFolderMutation, map[string]any{
 		"fullPath": c.FullPath,
@@ -627,7 +645,7 @@ func (c *FilesFavoritesRemoveCmd) Run(apiClient *client.Client, printer output.P
 	return printer.PrintList(resp.Data.RemoveFavoriteFolder)
 }
 
-func (c *FilesFavoritesAliasCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *FavoritesAliasCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp favoriteFolderMutationResponse
 	if err := apiClient.GraphQL(context.Background(), setFavoriteFolderAliasMutation, map[string]any{
 		"alias":    c.Alias,
@@ -659,16 +677,16 @@ func listFiles(
 		return fetchFilesPage(ctx, apiClient, root, query, sortBy, offset, limit)
 	}
 
-	files := make([]api.File, 0, filesPageSize)
+	files := make([]api.File, 0, cmdutil.FilesPageSize)
 	currentOffset := offset
 	for {
-		page, err := fetchFilesPage(ctx, apiClient, root, query, sortBy, currentOffset, filesPageSize)
+		page, err := fetchFilesPage(ctx, apiClient, root, query, sortBy, currentOffset, cmdutil.FilesPageSize)
 		if err != nil {
 			return nil, err
 		}
 
 		files = append(files, page...)
-		if len(page) < filesPageSize {
+		if len(page) < cmdutil.FilesPageSize {
 			return files, nil
 		}
 
@@ -749,89 +767,66 @@ func remoteFileAtPath(ctx context.Context, apiClient *client.Client, remotePath 
 	return nil, nil
 }
 
-func shouldShowTransferProgress(cli *CLI) bool {
-	if cli == nil {
-		return true
-	}
+type (
+	downloadProgressMsg int64
+	downloadDoneMsg     struct{}
+)
 
-	return cli.Output == output.FormatTable
+type downloadProgressModel struct {
+	bar      progress.Model
+	label    string
+	received int64
 }
 
-type progressWriter struct {
+func (m downloadProgressModel) Init() tea.Cmd { return nil }
+
+func (m downloadProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch v := msg.(type) {
+	case downloadProgressMsg:
+		m.received = int64(v)
+		return m, nil
+	case downloadDoneMsg:
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+func (m downloadProgressModel) View() string {
+	const cycleBytes = 1 << 20 // cycle every MB
+	pct := float64(m.received%cycleBytes) / float64(cycleBytes)
+	return m.label + " " + m.bar.ViewAs(pct) + fmt.Sprintf(" %d B", m.received) + "\n"
+}
+
+type (
+	uploadProgressMsg struct{ done, total int64 }
+	uploadDoneMsg     struct{}
+)
+
+type uploadProgressModel struct {
+	bar   progress.Model
 	label string
-	w     io.Writer
 	done  int64
+	total int64
 }
 
-func (w *progressWriter) Write(p []byte) (int, error) {
-	n, err := w.w.Write(p)
-	w.done += int64(n)
-	w.render()
-	return n, err
-}
+func (m uploadProgressModel) Init() tea.Cmd { return nil }
 
-func (w *progressWriter) Finish() {
-	w.render()
-	_, _ = fmt.Fprintln(os.Stderr)
-}
-
-func (w *progressWriter) render() {
-	const width = 24
-
-	progress := int(w.done % int64(width+1))
-	bar := strings.Repeat("=", progress)
-	if progress < width {
-		bar += ">"
-		bar += strings.Repeat(" ", width-progress-1)
+func (m uploadProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch v := msg.(type) {
+	case uploadProgressMsg:
+		m.done = v.done
+		m.total = v.total
+		return m, nil
+	case uploadDoneMsg:
+		return m, tea.Quit
 	}
-
-	line := fmt.Sprintf("\r%s %s %d B", truncateLabel(w.label), progressBarStyle.Render("["+bar+"]"), w.done)
-	_, _ = fmt.Fprint(os.Stderr, line)
+	return m, nil
 }
 
-type uploadProgressRenderer struct {
-	label string
-}
-
-func (r *uploadProgressRenderer) Update(done, total int64) {
-	const width = 24
-
+func (m uploadProgressModel) View() string {
 	ratio := 0.0
-	if total > 0 {
-		ratio = float64(done) / float64(total)
-		if ratio > 1 {
-			ratio = 1
-		}
+	if m.total > 0 {
+		ratio = float64(m.done) / float64(m.total)
 	}
-
-	filled := int(ratio * width)
-	if filled > width {
-		filled = width
-	}
-
-	bar := strings.Repeat("=", filled) + strings.Repeat(" ", width-filled)
-	line := fmt.Sprintf(
-		"\r%s %s %3.0f%% (%d/%d B)",
-		truncateLabel(r.label),
-		progressBarStyle.Render("["+bar+"]"),
-		ratio*100,
-		done,
-		total,
-	)
-	_, _ = fmt.Fprint(os.Stderr, line)
-}
-
-func (r *uploadProgressRenderer) Finish() {
-	_, _ = fmt.Fprintln(os.Stderr)
-}
-
-func truncateLabel(label string) string {
-	const maxLen = 32
-
-	label = strings.TrimSpace(label)
-	if len(label) <= maxLen {
-		return label
-	}
-
-	return "..." + label[len(label)-maxLen+3:]
+	return m.label + " " + m.bar.ViewAs(ratio) + fmt.Sprintf(" %d/%d B", m.done, m.total) + "\n"
 }

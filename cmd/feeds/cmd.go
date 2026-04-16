@@ -1,4 +1,4 @@
-package cmd
+package feeds
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackrosenthal/plain-cli/internal/api"
 	"github.com/jackrosenthal/plain-cli/internal/client"
+	"github.com/jackrosenthal/plain-cli/internal/cmdutil"
 	"github.com/jackrosenthal/plain-cli/internal/output"
 )
 
@@ -123,66 +124,66 @@ const (
 }`
 )
 
-type FeedsCmd struct {
-	LS      FeedsLSCmd      `cmd:"" help:"List feeds."`
-	Add     FeedsAddCmd     `cmd:"" help:"Add a feed."`
-	Update  FeedsUpdateCmd  `cmd:"" help:"Update a feed."`
-	Delete  FeedsDeleteCmd  `cmd:"" help:"Delete a feed."`
-	Sync    FeedsSyncCmd    `cmd:"" help:"Sync feeds."`
-	Import  FeedsImportCmd  `cmd:"" help:"Import feeds from OPML."`
-	Export  FeedsExportCmd  `cmd:"" help:"Export feeds as OPML."`
-	Entries FeedsEntriesCmd `cmd:"" help:"Manage feed entries."`
+type Cmd struct {
+	LS      LSCmd      `cmd:"" help:"List feeds."`
+	Add     AddCmd     `cmd:"" help:"Add a feed."`
+	Update  UpdateCmd  `cmd:"" help:"Update a feed."`
+	Delete  DeleteCmd  `cmd:"" help:"Delete a feed."`
+	Sync    SyncCmd    `cmd:"" help:"Sync feeds."`
+	Import  ImportCmd  `cmd:"" help:"Import feeds from OPML."`
+	Export  ExportCmd  `cmd:"" help:"Export feeds as OPML."`
+	Entries EntriesCmd `cmd:"" help:"Manage feed entries."`
 }
 
-type FeedsLSCmd struct{}
+type LSCmd struct{}
 
-type FeedsAddCmd struct {
+type AddCmd struct {
 	URL          string `arg:"" help:"Feed URL."`
 	FetchContent bool   `help:"Fetch article content."`
 }
 
-type FeedsUpdateCmd struct {
+type UpdateCmd struct {
 	ID           string `arg:"" help:"Feed ID."`
 	Name         string `help:"Feed name." required:""`
 	FetchContent bool   `help:"Fetch article content."`
 }
 
-type FeedsDeleteCmd struct {
+type DeleteCmd struct {
 	ID string `arg:"" help:"Feed ID."`
 }
 
-type FeedsSyncCmd struct {
+type SyncCmd struct {
 	ID string `help:"Specific feed ID to sync."`
 }
 
-type FeedsImportCmd struct {
+type ImportCmd struct {
 	OpmlFile string `arg:"" help:"Local OPML file path."`
 }
 
-type FeedsExportCmd struct{}
+type ExportCmd struct{}
 
-type FeedsEntriesCmd struct {
-	LS          FeedsEntriesLSCmd          `cmd:"" help:"List feed entries."`
-	Get         FeedsEntriesGetCmd         `cmd:"" help:"Get a feed entry by ID."`
-	Delete      FeedsEntriesDeleteCmd      `cmd:"" help:"Delete feed entries."`
-	SaveToNotes FeedsEntriesSaveToNotesCmd `cmd:"" help:"Save feed entries to notes."`
+type EntriesCmd struct {
+	LS          EntriesLSCmd          `cmd:"" help:"List feed entries."`
+	Get         EntriesGetCmd         `cmd:"" help:"Get a feed entry by ID."`
+	Delete      EntriesDeleteCmd      `cmd:"" help:"Delete feed entries."`
+	SaveToNotes EntriesSaveToNotesCmd `cmd:"" help:"Save feed entries to notes."`
 }
 
-type FeedsEntriesLSCmd struct {
+type EntriesLSCmd struct {
 	Query  string `help:"Search query."`
 	Limit  int    `help:"Maximum number of results to return."`
 	Offset int    `help:"Number of results to skip."`
 }
 
-type FeedsEntriesGetCmd struct {
+type EntriesGetCmd struct {
 	ID string `arg:"" help:"Feed entry ID."`
 }
 
-type FeedsEntriesDeleteCmd struct {
+type EntriesDeleteCmd struct {
 	Query string `arg:"" help:"Selection query."`
 }
 
-type FeedsEntriesSaveToNotesCmd struct {
+type EntriesSaveToNotesCmd struct {
 	Query string `arg:"" help:"Selection query."`
 }
 
@@ -251,7 +252,7 @@ type feedEntryDetail struct {
 	Feed api.Feed `json:"feed"`
 }
 
-func (c *FeedsLSCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *LSCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp feedsResponse
 	if err := apiClient.GraphQL(context.Background(), feedsQuery, nil, &resp); err != nil {
 		return fmt.Errorf("query feeds: %w", err)
@@ -260,7 +261,7 @@ func (c *FeedsLSCmd) Run(apiClient *client.Client, printer output.Printer) error
 	return printer.PrintList(resp.Data.Feeds)
 }
 
-func (c *FeedsAddCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *AddCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp feedMutationResponse
 	if err := apiClient.GraphQL(context.Background(), createFeedMutation, map[string]any{
 		"fetchContent": c.FetchContent,
@@ -272,7 +273,7 @@ func (c *FeedsAddCmd) Run(apiClient *client.Client, printer output.Printer) erro
 	return printer.Print(resp.Data.CreateFeed)
 }
 
-func (c *FeedsUpdateCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *UpdateCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp feedMutationResponse
 	if err := apiClient.GraphQL(context.Background(), updateFeedMutation, map[string]any{
 		"fetchContent": c.FetchContent,
@@ -285,7 +286,7 @@ func (c *FeedsUpdateCmd) Run(apiClient *client.Client, printer output.Printer) e
 	return printer.Print(resp.Data.UpdateFeed)
 }
 
-func (c *FeedsDeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *DeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp feedMutationResponse
 	if err := apiClient.GraphQL(context.Background(), deleteFeedMutation, map[string]any{
 		"id": c.ID,
@@ -296,13 +297,10 @@ func (c *FeedsDeleteCmd) Run(apiClient *client.Client, printer output.Printer) e
 		return errors.New("delete feed: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Deleted feed %s.", c.ID),
-	})
+	return nil
 }
 
-func (c *FeedsSyncCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *SyncCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var id any
 	if c.ID != "" {
 		id = c.ID
@@ -318,18 +316,10 @@ func (c *FeedsSyncCmd) Run(apiClient *client.Client, printer output.Printer) err
 		return errors.New("sync feeds: mutation returned false")
 	}
 
-	message := "Synced all feeds."
-	if c.ID != "" {
-		message = fmt.Sprintf("Synced feed %s.", c.ID)
-	}
-
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: message,
-	})
+	return nil
 }
 
-func (c *FeedsImportCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *ImportCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	content, err := os.ReadFile(c.OpmlFile)
 	if err != nil {
 		return fmt.Errorf("read OPML file: %w", err)
@@ -345,13 +335,10 @@ func (c *FeedsImportCmd) Run(apiClient *client.Client, printer output.Printer) e
 		return errors.New("import feeds: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Imported feeds from %s.", c.OpmlFile),
-	})
+	return nil
 }
 
-func (c *FeedsExportCmd) Run(apiClient *client.Client) error {
+func (c *ExportCmd) Run(apiClient *client.Client) error {
 	var resp feedMutationResponse
 	if err := apiClient.GraphQL(context.Background(), exportFeedsMutation, nil, &resp); err != nil {
 		return fmt.Errorf("export feeds: %w", err)
@@ -361,7 +348,7 @@ func (c *FeedsExportCmd) Run(apiClient *client.Client) error {
 	return err
 }
 
-func (c *FeedsEntriesLSCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *EntriesLSCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	items, err := listFeedEntries(context.Background(), apiClient, c.Query, c.Offset, c.Limit)
 	if err != nil {
 		return err
@@ -370,7 +357,7 @@ func (c *FeedsEntriesLSCmd) Run(apiClient *client.Client, printer output.Printer
 	return printer.PrintList(items)
 }
 
-func (c *FeedsEntriesGetCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *EntriesGetCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp feedEntryResponse
 	if err := apiClient.GraphQL(context.Background(), feedEntryQuery, map[string]any{
 		"id": c.ID,
@@ -381,7 +368,7 @@ func (c *FeedsEntriesGetCmd) Run(apiClient *client.Client, printer output.Printe
 	return printer.Print(resp.Data.FeedEntry)
 }
 
-func (c *FeedsEntriesDeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *EntriesDeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	if err := runFeedsBoolMutation(
 		context.Background(),
 		apiClient,
@@ -392,13 +379,10 @@ func (c *FeedsEntriesDeleteCmd) Run(apiClient *client.Client, printer output.Pri
 		return err
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Deleted feed entries matching %q.", c.Query),
-	})
+	return nil
 }
 
-func (c *FeedsEntriesSaveToNotesCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *EntriesSaveToNotesCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	if err := runFeedsBoolMutation(
 		context.Background(),
 		apiClient,
@@ -409,10 +393,7 @@ func (c *FeedsEntriesSaveToNotesCmd) Run(apiClient *client.Client, printer outpu
 		return err
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Saved feed entries matching %q to notes.", c.Query),
-	})
+	return nil
 }
 
 func listFeedEntries(
@@ -506,7 +487,7 @@ func displayFeedEntries(records []feedEntryListRecord) []feedEntryListItem {
 			PublishedAt: record.PublishedAt,
 			CreatedAt:   record.CreatedAt,
 			UpdatedAt:   record.UpdatedAt,
-			Tags:        tagNames(record.Tags),
+			Tags:        cmdutil.TagNames(record.Tags),
 		})
 	}
 

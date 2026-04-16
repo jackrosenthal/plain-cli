@@ -1,4 +1,4 @@
-package cmd
+package notes
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackrosenthal/plain-cli/internal/api"
 	"github.com/jackrosenthal/plain-cli/internal/client"
+	"github.com/jackrosenthal/plain-cli/internal/cmdutil"
 	"github.com/jackrosenthal/plain-cli/internal/output"
 )
 
@@ -79,44 +80,44 @@ const (
 }`
 )
 
-type NotesCmd struct {
-	LS      NotesLSCmd      `cmd:"" help:"List notes."`
-	Get     NotesGetCmd     `cmd:"" help:"Get a note by ID."`
-	Save    NotesSaveCmd    `cmd:"" help:"Create or update a note."`
-	Trash   NotesTrashCmd   `cmd:"" help:"Trash notes."`
-	Restore NotesRestoreCmd `cmd:"" help:"Restore notes from trash."`
-	Delete  NotesDeleteCmd  `cmd:"" help:"Delete notes permanently."`
-	Export  NotesExportCmd  `cmd:"" help:"Export notes."`
+type Cmd struct {
+	LS      LSCmd      `cmd:"" help:"List notes."`
+	Get     GetCmd     `cmd:"" help:"Get a note by ID."`
+	Save    SaveCmd    `cmd:"" help:"Create or update a note."`
+	Trash   TrashCmd   `cmd:"" help:"Trash notes."`
+	Restore RestoreCmd `cmd:"" help:"Restore notes from trash."`
+	Delete  DeleteCmd  `cmd:"" help:"Delete notes permanently."`
+	Export  ExportCmd  `cmd:"" help:"Export notes."`
 }
 
-type NotesLSCmd struct {
+type LSCmd struct {
 	Query  string `help:"Search query."`
 	Limit  int    `help:"Maximum number of results to return."`
 	Offset int    `help:"Number of results to skip."`
 }
 
-type NotesGetCmd struct {
+type GetCmd struct {
 	ID string `arg:"" help:"Note ID."`
 }
 
-type NotesSaveCmd struct {
+type SaveCmd struct {
 	ID    string `help:"Existing note ID."`
 	Title string `help:"Note title." required:""`
 }
 
-type NotesTrashCmd struct {
+type TrashCmd struct {
 	Query string `arg:"" help:"Selection query."`
 }
 
-type NotesRestoreCmd struct {
+type RestoreCmd struct {
 	Query string `arg:"" help:"Selection query."`
 }
 
-type NotesDeleteCmd struct {
+type DeleteCmd struct {
 	Query string `arg:"" help:"Selection query."`
 }
 
-type NotesExportCmd struct {
+type ExportCmd struct {
 	Query string `arg:"" help:"Selection query."`
 }
 
@@ -164,7 +165,7 @@ type exportedNotes struct {
 	Content string `json:"content"`
 }
 
-func (c *NotesLSCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *LSCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	notes, err := listNotes(context.Background(), apiClient, c.Query, c.Offset, c.Limit)
 	if err != nil {
 		return err
@@ -173,7 +174,7 @@ func (c *NotesLSCmd) Run(apiClient *client.Client, printer output.Printer) error
 	return printer.PrintList(notes)
 }
 
-func (c *NotesGetCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *GetCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp noteResponse
 	if err := apiClient.GraphQL(context.Background(), noteQuery, map[string]any{
 		"id": c.ID,
@@ -184,7 +185,7 @@ func (c *NotesGetCmd) Run(apiClient *client.Client, printer output.Printer) erro
 	return printer.Print(resp.Data.Note)
 }
 
-func (c *NotesSaveCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *SaveCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	data, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		return fmt.Errorf("read stdin: %w", err)
@@ -214,40 +215,31 @@ func (c *NotesSaveCmd) Run(apiClient *client.Client, printer output.Printer) err
 	return printer.Print(resp.Data.SaveNote)
 }
 
-func (c *NotesTrashCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *TrashCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	if err := runNotesBoolMutation(context.Background(), apiClient, trashNotesMutation, "trashNotes", c.Query); err != nil {
 		return err
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Trashed notes matching %q.", c.Query),
-	})
+	return nil
 }
 
-func (c *NotesRestoreCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *RestoreCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	if err := runNotesBoolMutation(context.Background(), apiClient, restoreNotesMutation, "restoreNotes", c.Query); err != nil {
 		return err
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Restored notes matching %q.", c.Query),
-	})
+	return nil
 }
 
-func (c *NotesDeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *DeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	if err := runNotesBoolMutation(context.Background(), apiClient, deleteNotesMutation, "deleteNotes", c.Query); err != nil {
 		return err
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Deleted notes matching %q.", c.Query),
-	})
+	return nil
 }
 
-func (c *NotesExportCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *ExportCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp noteMutationResponse
 	if err := apiClient.GraphQL(context.Background(), exportNotesMutation, map[string]any{
 		"query": c.Query,
@@ -340,18 +332,9 @@ func displayNotes(notes []noteListRecord) []noteListItem {
 			DeletedAt: note.DeletedAt,
 			CreatedAt: note.CreatedAt,
 			UpdatedAt: note.UpdatedAt,
-			Tags:      tagNames(note.Tags),
+			Tags:      cmdutil.TagNames(note.Tags),
 		})
 	}
 
 	return display
-}
-
-func tagNames(tags []api.Tag) []string {
-	names := make([]string, 0, len(tags))
-	for _, tag := range tags {
-		names = append(names, tag.Name)
-	}
-
-	return names
 }

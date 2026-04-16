@@ -1,4 +1,4 @@
-package cmd
+package tags
 
 import (
 	"context"
@@ -49,40 +49,40 @@ const (
 }`
 )
 
-type TagsCmd struct {
-	LS     TagsLSCmd     `cmd:"" help:"List tags for a content type."`
-	Create TagsCreateCmd `cmd:"" help:"Create a tag."`
-	Update TagsUpdateCmd `cmd:"" help:"Update a tag."`
-	Delete TagsDeleteCmd `cmd:"" help:"Delete a tag."`
-	Add    TagsAddCmd    `cmd:"" help:"Add items to tags."`
-	Remove TagsRemoveCmd `cmd:"" help:"Remove items from tags."`
+type Cmd struct {
+	LS     LSCmd     `cmd:"" help:"List tags for a content type."`
+	Create CreateCmd `cmd:"" help:"Create a tag."`
+	Update UpdateCmd `cmd:"" help:"Update a tag."`
+	Delete DeleteCmd `cmd:"" help:"Delete a tag."`
+	Add    AddCmd    `cmd:"" help:"Add items to tags."`
+	Remove RemoveCmd `cmd:"" help:"Remove items from tags."`
 }
 
-type TagsLSCmd struct {
+type LSCmd struct {
 	Type string `help:"Content type." enum:"image,video,audio,note,feed-entry,call,contact,message,bookmark" required:""`
 }
 
-type TagsCreateCmd struct {
+type CreateCmd struct {
 	Type string `help:"Content type." enum:"image,video,audio,note,feed-entry,call,contact,message,bookmark" required:""`
 	Name string `help:"Tag name." required:""`
 }
 
-type TagsUpdateCmd struct {
+type UpdateCmd struct {
 	ID   string `arg:"" help:"Tag ID."`
 	Name string `help:"New tag name." required:""`
 }
 
-type TagsDeleteCmd struct {
+type DeleteCmd struct {
 	ID string `arg:"" help:"Tag ID."`
 }
 
-type TagsAddCmd struct {
+type AddCmd struct {
 	Type  string `help:"Content type." enum:"image,video,audio,note,feed-entry,call,contact,message,bookmark" required:""`
 	Query string `help:"Selection query." required:""`
 	Tags  string `help:"Comma-separated tag IDs." required:""`
 }
 
-type TagsRemoveCmd struct {
+type RemoveCmd struct {
 	Type  string `help:"Content type." enum:"image,video,audio,note,feed-entry,call,contact,message,bookmark" required:""`
 	Query string `help:"Selection query." required:""`
 	Tags  string `help:"Comma-separated tag IDs." required:""`
@@ -104,7 +104,7 @@ type tagMutationResponse struct {
 	} `json:"data"`
 }
 
-func (c *TagsLSCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *LSCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp tagsResponse
 	if err := apiClient.GraphQL(context.Background(), tagsQuery, map[string]any{
 		"type": api.DataType(c.Type).ToGraphQL(),
@@ -115,7 +115,7 @@ func (c *TagsLSCmd) Run(apiClient *client.Client, printer output.Printer) error 
 	return printer.PrintList(resp.Data.Tags)
 }
 
-func (c *TagsCreateCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *CreateCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp tagMutationResponse
 	if err := apiClient.GraphQL(context.Background(), createTagMutation, map[string]any{
 		"type": api.DataType(c.Type).ToGraphQL(),
@@ -127,7 +127,7 @@ func (c *TagsCreateCmd) Run(apiClient *client.Client, printer output.Printer) er
 	return printer.Print(resp.Data.CreateTag)
 }
 
-func (c *TagsUpdateCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *UpdateCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp tagMutationResponse
 	if err := apiClient.GraphQL(context.Background(), updateTagMutation, map[string]any{
 		"id":   c.ID,
@@ -139,7 +139,7 @@ func (c *TagsUpdateCmd) Run(apiClient *client.Client, printer output.Printer) er
 	return printer.Print(resp.Data.UpdateTag)
 }
 
-func (c *TagsDeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *DeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp tagMutationResponse
 	if err := apiClient.GraphQL(context.Background(), deleteTagMutation, map[string]any{
 		"id": c.ID,
@@ -150,13 +150,10 @@ func (c *TagsDeleteCmd) Run(apiClient *client.Client, printer output.Printer) er
 		return errors.New("delete tag: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Deleted tag %s.", c.ID),
-	})
+	return nil
 }
 
-func (c *TagsAddCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *AddCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	tagIDs, err := parseTagIDs(c.Tags)
 	if err != nil {
 		return err
@@ -174,13 +171,10 @@ func (c *TagsAddCmd) Run(apiClient *client.Client, printer output.Printer) error
 		return errors.New("add to tags: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Added %d tag(s) to items matching %q.", len(tagIDs), c.Query),
-	})
+	return nil
 }
 
-func (c *TagsRemoveCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *RemoveCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	tagIDs, err := parseTagIDs(c.Tags)
 	if err != nil {
 		return err
@@ -198,10 +192,7 @@ func (c *TagsRemoveCmd) Run(apiClient *client.Client, printer output.Printer) er
 		return errors.New("remove from tags: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Removed %d tag(s) from items matching %q.", len(tagIDs), c.Query),
-	})
+	return nil
 }
 
 func parseTagIDs(value string) ([]string, error) {

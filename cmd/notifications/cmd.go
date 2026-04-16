@@ -1,4 +1,4 @@
-package cmd
+package notifications
 
 import (
 	"context"
@@ -36,19 +36,19 @@ const (
 }`
 )
 
-type NotificationsCmd struct {
-	LS     NotificationsLSCmd     `cmd:"" help:"List notifications."`
-	Cancel NotificationsCancelCmd `cmd:"" help:"Cancel notifications."`
-	Reply  NotificationsReplyCmd  `cmd:"" help:"Reply to a notification."`
+type Cmd struct {
+	LS     LSCmd     `cmd:"" help:"List notifications."`
+	Cancel CancelCmd `cmd:"" help:"Cancel notifications."`
+	Reply  ReplyCmd  `cmd:"" help:"Reply to a notification."`
 }
 
-type NotificationsLSCmd struct{}
+type LSCmd struct{}
 
-type NotificationsCancelCmd struct {
+type CancelCmd struct {
 	IDs []string `arg:"" name:"ids" help:"Notification IDs."`
 }
 
-type NotificationsReplyCmd struct {
+type ReplyCmd struct {
 	ID          string `arg:"" help:"Notification ID."`
 	ActionIndex int    `name:"action-index" help:"Action index to invoke." required:""`
 	Text        string `name:"text" help:"Reply text." required:""`
@@ -67,7 +67,7 @@ type notificationMutationResponse struct {
 	} `json:"data"`
 }
 
-func (c *NotificationsLSCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *LSCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp notificationsResponse
 	if err := apiClient.GraphQL(context.Background(), notificationsQuery, nil, &resp); err != nil {
 		return fmt.Errorf("query notifications: %w", err)
@@ -76,7 +76,7 @@ func (c *NotificationsLSCmd) Run(apiClient *client.Client, printer output.Printe
 	return printer.PrintList(resp.Data.Notifications)
 }
 
-func (c *NotificationsCancelCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *CancelCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp notificationMutationResponse
 	if err := apiClient.GraphQL(context.Background(), cancelNotificationsMutation, map[string]any{
 		"ids": c.IDs,
@@ -87,13 +87,10 @@ func (c *NotificationsCancelCmd) Run(apiClient *client.Client, printer output.Pr
 		return errors.New("cancel notifications: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Canceled %d notification(s).", len(c.IDs)),
-	})
+	return nil
 }
 
-func (c *NotificationsReplyCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *ReplyCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp notificationMutationResponse
 	if err := apiClient.GraphQL(context.Background(), replyNotificationMutation, map[string]any{
 		"actionIndex": c.ActionIndex,
@@ -106,8 +103,5 @@ func (c *NotificationsReplyCmd) Run(apiClient *client.Client, printer output.Pri
 		return errors.New("reply to notification: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Replied to notification %s.", c.ID),
-	})
+	return nil
 }

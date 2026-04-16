@@ -1,4 +1,4 @@
-package cmd
+package device
 
 import (
 	"context"
@@ -10,22 +10,22 @@ import (
 	"github.com/jackrosenthal/plain-cli/internal/output"
 )
 
-type DeviceCmd struct {
-	Info     DeviceInfoCmd     `cmd:"" help:"Show device information."`
-	Battery  DeviceBatteryCmd  `cmd:"" help:"Show battery status."`
-	App      DeviceAppCmd      `cmd:"" help:"Show app information."`
-	Peers    DevicePeersCmd    `cmd:"" help:"List connected peers."`
-	Mounts   DeviceMountsCmd   `cmd:"" help:"List storage mounts."`
-	Relaunch DeviceRelaunchCmd `cmd:"" help:"Relaunch the Plain app."`
+type Cmd struct {
+	Info     InfoCmd     `cmd:"" help:"Show device information."`
+	Battery  BatteryCmd  `cmd:"" help:"Show battery status."`
+	App      AppCmd      `cmd:"" help:"Show app information."`
+	Peers    PeersCmd    `cmd:"" help:"List connected peers."`
+	Mounts   MountsCmd   `cmd:"" help:"List storage mounts."`
+	Relaunch RelaunchCmd `cmd:"" help:"Relaunch the Plain app."`
 }
 
 type (
-	DeviceInfoCmd     struct{}
-	DeviceBatteryCmd  struct{}
-	DeviceAppCmd      struct{}
-	DevicePeersCmd    struct{}
-	DeviceMountsCmd   struct{}
-	DeviceRelaunchCmd struct{}
+	InfoCmd     struct{}
+	BatteryCmd  struct{}
+	AppCmd      struct{}
+	PeersCmd    struct{}
+	MountsCmd   struct{}
+	RelaunchCmd struct{}
 )
 
 const (
@@ -202,12 +202,7 @@ type mountOutput struct {
 	DiskID     string `json:"diskID"`
 }
 
-type deviceStatusMessage struct {
-	Status  string `json:"status"`
-	Message string `json:"message"`
-}
-
-func (c *DeviceInfoCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *InfoCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp deviceInfoResponse
 	if err := apiClient.GraphQL(context.Background(), deviceInfoQuery, nil, &resp); err != nil {
 		return fmt.Errorf("query device info: %w", err)
@@ -216,7 +211,7 @@ func (c *DeviceInfoCmd) Run(apiClient *client.Client, printer output.Printer) er
 	return printer.Print(resp.Data.DeviceInfo)
 }
 
-func (c *DeviceBatteryCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *BatteryCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp deviceBatteryResponse
 	if err := apiClient.GraphQL(context.Background(), deviceBatteryQuery, nil, &resp); err != nil {
 		return fmt.Errorf("query battery: %w", err)
@@ -225,7 +220,7 @@ func (c *DeviceBatteryCmd) Run(apiClient *client.Client, printer output.Printer)
 	return printer.Print(resp.Data.Battery)
 }
 
-func (c *DeviceAppCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *AppCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp deviceAppResponse
 	if err := apiClient.GraphQL(context.Background(), deviceAppQuery, nil, &resp); err != nil {
 		return fmt.Errorf("query app: %w", err)
@@ -234,7 +229,7 @@ func (c *DeviceAppCmd) Run(apiClient *client.Client, printer output.Printer) err
 	return printer.Print(resp.Data.App)
 }
 
-func (c *DevicePeersCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *PeersCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp devicePeersResponse
 	if err := apiClient.GraphQL(context.Background(), devicePeersQuery, nil, &resp); err != nil {
 		return fmt.Errorf("query peers: %w", err)
@@ -243,7 +238,7 @@ func (c *DevicePeersCmd) Run(apiClient *client.Client, printer output.Printer) e
 	return printer.PrintList(resp.Data.Peers)
 }
 
-func (c *DeviceMountsCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *MountsCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp deviceMountsResponse
 	if err := apiClient.GraphQL(context.Background(), deviceMountsQuery, nil, &resp); err != nil {
 		return fmt.Errorf("query mounts: %w", err)
@@ -270,7 +265,7 @@ func (c *DeviceMountsCmd) Run(apiClient *client.Client, printer output.Printer) 
 	return printer.PrintList(formatted)
 }
 
-func (c *DeviceRelaunchCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *RelaunchCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp deviceRelaunchResponse
 	if err := apiClient.GraphQL(context.Background(), deviceRelaunchMutation, nil, &resp); err != nil {
 		return fmt.Errorf("relaunch app: %w", err)
@@ -280,10 +275,7 @@ func (c *DeviceRelaunchCmd) Run(apiClient *client.Client, printer output.Printer
 		return fmt.Errorf("relaunch app: mutation returned false")
 	}
 
-	return printer.Print(deviceStatusMessage{
-		Status:  "ok",
-		Message: "App relaunch requested.",
-	})
+	return nil
 }
 
 func humanizeBytes(size int) string {

@@ -1,4 +1,4 @@
-package cmd
+package sms
 
 import (
 	"context"
@@ -59,31 +59,31 @@ const (
 }`
 )
 
-type SMSCmd struct {
-	LS            SMSLSCmd            `cmd:"" help:"List SMS messages."`
-	Conversations SMSConversationsCmd `cmd:"" help:"List SMS conversations."`
-	Send          SMSSendCmd          `cmd:"" help:"Send an SMS message."`
-	SendMMS       SMSSendMMSCmd       `cmd:"" help:"Send an MMS message."`
+type Cmd struct {
+	LS            LSCmd            `cmd:"" help:"List SMS messages."`
+	Conversations ConversationsCmd `cmd:"" help:"List SMS conversations."`
+	Send          SendCmd          `cmd:"" help:"Send an SMS message."`
+	SendMMS       SendMMSCmd       `cmd:"" help:"Send an MMS message."`
 }
 
-type SMSLSCmd struct {
+type LSCmd struct {
 	Query  string `help:"Search query."`
 	Limit  int    `help:"Maximum number of results to return."`
 	Offset int    `help:"Number of results to skip."`
 }
 
-type SMSConversationsCmd struct {
+type ConversationsCmd struct {
 	Query  string `help:"Search query."`
 	Limit  int    `help:"Maximum number of results to return."`
 	Offset int    `help:"Number of results to skip."`
 }
 
-type SMSSendCmd struct {
+type SendCmd struct {
 	Number string `arg:"" help:"Phone number."`
 	Body   string `arg:"" help:"Message body."`
 }
 
-type SMSSendMMSCmd struct {
+type SendMMSCmd struct {
 	Number      string   `arg:"" help:"Phone number."`
 	Body        string   `arg:"" optional:"" help:"Message body."`
 	ThreadID    string   `name:"thread-id" help:"Conversation thread ID. Inferred from the number when omitted and there is exactly one matching conversation."`
@@ -109,7 +109,7 @@ type smsMutationResponse struct {
 	} `json:"data"`
 }
 
-func (c *SMSLSCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *LSCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	messages, err := listSMS(context.Background(), apiClient, c.Query, c.Offset, c.Limit)
 	if err != nil {
 		return err
@@ -118,7 +118,7 @@ func (c *SMSLSCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	return printer.PrintList(messages)
 }
 
-func (c *SMSConversationsCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *ConversationsCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	conversations, err := listSMSConversations(context.Background(), apiClient, c.Query, c.Offset, c.Limit)
 	if err != nil {
 		return err
@@ -127,7 +127,7 @@ func (c *SMSConversationsCmd) Run(apiClient *client.Client, printer output.Print
 	return printer.PrintList(conversations)
 }
 
-func (c *SMSSendCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *SendCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp smsMutationResponse
 	if err := apiClient.GraphQL(context.Background(), sendSMSMutation, map[string]any{
 		"body":   c.Body,
@@ -139,13 +139,10 @@ func (c *SMSSendCmd) Run(apiClient *client.Client, printer output.Printer) error
 		return errors.New("send sms: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("SMS sent to %s.", c.Number),
-	})
+	return nil
 }
 
-func (c *SMSSendMMSCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *SendMMSCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	attachments := c.Attachments
 	if attachments == nil {
 		attachments = []string{}
@@ -176,10 +173,7 @@ func (c *SMSSendMMSCmd) Run(apiClient *client.Client, printer output.Printer) er
 		return errors.New("send mms: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("MMS sent to %s.", c.Number),
-	})
+	return nil
 }
 
 func resolveSMSConversationThreadID(ctx context.Context, apiClient *client.Client, number string) (string, error) {

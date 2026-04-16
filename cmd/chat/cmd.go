@@ -1,4 +1,4 @@
-package cmd
+package chat
 
 import (
 	"context"
@@ -136,80 +136,80 @@ const (
 }`
 )
 
-type ChatCmd struct {
-	Channels ChatChannelsCmd `cmd:"" help:"Manage chat channels."`
-	Messages ChatMessagesCmd `cmd:"" help:"List messages for a channel."`
-	Send     ChatSendCmd     `cmd:"" help:"Send a chat message."`
-	Delete   ChatDeleteCmd   `cmd:"" help:"Delete a chat message."`
+type Cmd struct {
+	Channels ChannelsCmd `cmd:"" help:"Manage chat channels."`
+	Messages MessagesCmd `cmd:"" help:"List messages for a channel."`
+	Send     SendCmd     `cmd:"" help:"Send a chat message."`
+	Delete   DeleteCmd   `cmd:"" help:"Delete a chat message."`
 }
 
-type ChatChannelsCmd struct {
-	LS      ChatChannelsLSCmd      `cmd:"" help:"List chat channels."`
-	Create  ChatChannelsCreateCmd  `cmd:"" help:"Create a chat channel."`
-	Update  ChatChannelsUpdateCmd  `cmd:"" help:"Update a chat channel."`
-	Delete  ChatChannelsDeleteCmd  `cmd:"" help:"Delete a chat channel."`
-	Leave   ChatChannelsLeaveCmd   `cmd:"" help:"Leave a chat channel."`
-	Invite  ChatChannelsInviteCmd  `cmd:"" help:"Respond to chat invitations."`
-	Members ChatChannelsMembersCmd `cmd:"" help:"Manage channel members."`
+type ChannelsCmd struct {
+	LS      ChannelsLSCmd      `cmd:"" help:"List chat channels."`
+	Create  ChannelsCreateCmd  `cmd:"" help:"Create a chat channel."`
+	Update  ChannelsUpdateCmd  `cmd:"" help:"Update a chat channel."`
+	Delete  ChannelsDeleteCmd  `cmd:"" help:"Delete a chat channel."`
+	Leave   ChannelsLeaveCmd   `cmd:"" help:"Leave a chat channel."`
+	Invite  ChannelsInviteCmd  `cmd:"" help:"Respond to chat invitations."`
+	Members ChannelsMembersCmd `cmd:"" help:"Manage channel members."`
 }
 
-type ChatChannelsLSCmd struct{}
+type ChannelsLSCmd struct{}
 
-type ChatChannelsCreateCmd struct {
+type ChannelsCreateCmd struct {
 	Name string `arg:"" help:"Channel name."`
 }
 
-type ChatChannelsUpdateCmd struct {
+type ChannelsUpdateCmd struct {
 	ID   string `arg:"" help:"Channel ID."`
 	Name string `arg:"" help:"New channel name."`
 }
 
-type ChatChannelsDeleteCmd struct {
+type ChannelsDeleteCmd struct {
 	ID string `arg:"" help:"Channel ID."`
 }
 
-type ChatChannelsLeaveCmd struct {
+type ChannelsLeaveCmd struct {
 	ID string `arg:"" help:"Channel ID."`
 }
 
-type ChatChannelsInviteCmd struct {
-	Accept  ChatChannelsInviteAcceptCmd  `cmd:"" help:"Accept a channel invite."`
-	Decline ChatChannelsInviteDeclineCmd `cmd:"" help:"Decline a channel invite."`
+type ChannelsInviteCmd struct {
+	Accept  ChannelsInviteAcceptCmd  `cmd:"" help:"Accept a channel invite."`
+	Decline ChannelsInviteDeclineCmd `cmd:"" help:"Decline a channel invite."`
 }
 
-type ChatChannelsInviteAcceptCmd struct {
+type ChannelsInviteAcceptCmd struct {
 	ID string `arg:"" help:"Invitation ID."`
 }
 
-type ChatChannelsInviteDeclineCmd struct {
+type ChannelsInviteDeclineCmd struct {
 	ID string `arg:"" help:"Invitation ID."`
 }
 
-type ChatChannelsMembersCmd struct {
-	Add    ChatChannelsMembersAddCmd    `cmd:"" help:"Add a channel member."`
-	Remove ChatChannelsMembersRemoveCmd `cmd:"" help:"Remove a channel member."`
+type ChannelsMembersCmd struct {
+	Add    ChannelsMembersAddCmd    `cmd:"" help:"Add a channel member."`
+	Remove ChannelsMembersRemoveCmd `cmd:"" help:"Remove a channel member."`
 }
 
-type ChatChannelsMembersAddCmd struct {
+type ChannelsMembersAddCmd struct {
 	ChannelID string `arg:"" help:"Channel ID."`
 	PeerID    string `arg:"" help:"Peer ID."`
 }
 
-type ChatChannelsMembersRemoveCmd struct {
+type ChannelsMembersRemoveCmd struct {
 	ChannelID string `arg:"" help:"Channel ID."`
 	PeerID    string `arg:"" help:"Peer ID."`
 }
 
-type ChatMessagesCmd struct {
+type MessagesCmd struct {
 	ChannelID string `arg:"" help:"Channel ID."`
 }
 
-type ChatSendCmd struct {
+type SendCmd struct {
 	ToID    string `arg:"" help:"Recipient or channel ID."`
 	Content string `arg:"" help:"Message content."`
 }
 
-type ChatDeleteCmd struct {
+type DeleteCmd struct {
 	ID string `arg:"" help:"Chat item ID."`
 }
 
@@ -245,7 +245,7 @@ type chatItemMutationResponse struct {
 	} `json:"data"`
 }
 
-func (c *ChatChannelsLSCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *ChannelsLSCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp chatChannelsResponse
 	if err := apiClient.GraphQL(context.Background(), chatChannelsQuery, nil, &resp); err != nil {
 		return fmt.Errorf("query chat channels: %w", err)
@@ -254,7 +254,7 @@ func (c *ChatChannelsLSCmd) Run(apiClient *client.Client, printer output.Printer
 	return printer.PrintList(resp.Data.ChatChannels)
 }
 
-func (c *ChatChannelsCreateCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *ChannelsCreateCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp chatChannelMutationResponse
 	if err := apiClient.GraphQL(context.Background(), createChatChannelMutation, map[string]any{
 		"name": c.Name,
@@ -265,7 +265,7 @@ func (c *ChatChannelsCreateCmd) Run(apiClient *client.Client, printer output.Pri
 	return printer.Print(resp.Data.CreateChatChannel)
 }
 
-func (c *ChatChannelsUpdateCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *ChannelsUpdateCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp chatChannelMutationResponse
 	if err := apiClient.GraphQL(context.Background(), updateChatChannelMutation, map[string]any{
 		"id":   c.ID,
@@ -277,7 +277,7 @@ func (c *ChatChannelsUpdateCmd) Run(apiClient *client.Client, printer output.Pri
 	return printer.Print(resp.Data.UpdateChatChannel)
 }
 
-func (c *ChatChannelsDeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *ChannelsDeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp chatChannelMutationResponse
 	if err := apiClient.GraphQL(context.Background(), deleteChatChannelMutation, map[string]any{
 		"id": c.ID,
@@ -288,13 +288,10 @@ func (c *ChatChannelsDeleteCmd) Run(apiClient *client.Client, printer output.Pri
 		return errors.New("delete chat channel: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Deleted chat channel %s.", c.ID),
-	})
+	return nil
 }
 
-func (c *ChatChannelsLeaveCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *ChannelsLeaveCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp chatChannelMutationResponse
 	if err := apiClient.GraphQL(context.Background(), leaveChatChannelMutation, map[string]any{
 		"id": c.ID,
@@ -305,13 +302,10 @@ func (c *ChatChannelsLeaveCmd) Run(apiClient *client.Client, printer output.Prin
 		return errors.New("leave chat channel: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Left chat channel %s.", c.ID),
-	})
+	return nil
 }
 
-func (c *ChatChannelsInviteAcceptCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *ChannelsInviteAcceptCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp chatChannelMutationResponse
 	if err := apiClient.GraphQL(context.Background(), acceptChatChannelInviteMutation, map[string]any{
 		"id": c.ID,
@@ -322,13 +316,10 @@ func (c *ChatChannelsInviteAcceptCmd) Run(apiClient *client.Client, printer outp
 		return errors.New("accept chat channel invite: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Accepted chat channel invite %s.", c.ID),
-	})
+	return nil
 }
 
-func (c *ChatChannelsInviteDeclineCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *ChannelsInviteDeclineCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp chatChannelMutationResponse
 	if err := apiClient.GraphQL(context.Background(), declineChatChannelInviteMutation, map[string]any{
 		"id": c.ID,
@@ -339,13 +330,10 @@ func (c *ChatChannelsInviteDeclineCmd) Run(apiClient *client.Client, printer out
 		return errors.New("decline chat channel invite: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Declined chat channel invite %s.", c.ID),
-	})
+	return nil
 }
 
-func (c *ChatChannelsMembersAddCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *ChannelsMembersAddCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp chatChannelMutationResponse
 	if err := apiClient.GraphQL(context.Background(), addChatChannelMemberMutation, map[string]any{
 		"id":     c.ChannelID,
@@ -357,7 +345,7 @@ func (c *ChatChannelsMembersAddCmd) Run(apiClient *client.Client, printer output
 	return printer.Print(resp.Data.AddChatChannelMember)
 }
 
-func (c *ChatChannelsMembersRemoveCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *ChannelsMembersRemoveCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp chatChannelMutationResponse
 	if err := apiClient.GraphQL(context.Background(), removeChatChannelMemberMutation, map[string]any{
 		"id":     c.ChannelID,
@@ -369,7 +357,7 @@ func (c *ChatChannelsMembersRemoveCmd) Run(apiClient *client.Client, printer out
 	return printer.Print(resp.Data.RemoveChatChannelMember)
 }
 
-func (c *ChatMessagesCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *MessagesCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp chatItemsResponse
 	if err := apiClient.GraphQL(context.Background(), chatItemsQuery, map[string]any{
 		"id": c.ChannelID,
@@ -380,7 +368,7 @@ func (c *ChatMessagesCmd) Run(apiClient *client.Client, printer output.Printer) 
 	return printer.PrintList(resp.Data.ChatItems)
 }
 
-func (c *ChatSendCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *SendCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp chatItemMutationResponse
 	if err := apiClient.GraphQL(context.Background(), sendChatItemMutation, map[string]any{
 		"content": c.Content,
@@ -392,7 +380,7 @@ func (c *ChatSendCmd) Run(apiClient *client.Client, printer output.Printer) erro
 	return printer.Print(resp.Data.SendChatItem)
 }
 
-func (c *ChatDeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *DeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp chatItemMutationResponse
 	if err := apiClient.GraphQL(context.Background(), deleteChatItemMutation, map[string]any{
 		"id": c.ID,
@@ -403,8 +391,5 @@ func (c *ChatDeleteCmd) Run(apiClient *client.Client, printer output.Printer) er
 		return errors.New("delete chat message: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Deleted chat message %s.", c.ID),
-	})
+	return nil
 }

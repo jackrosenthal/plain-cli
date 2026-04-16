@@ -1,4 +1,4 @@
-package cmd
+package pomodoro
 
 import (
 	"context"
@@ -10,26 +10,26 @@ import (
 	"github.com/jackrosenthal/plain-cli/internal/output"
 )
 
-type PomodoroCmd struct {
-	Status   PomodoroStatusCmd   `cmd:"" help:"Show Pomodoro status."`
-	Settings PomodoroSettingsCmd `cmd:"" help:"Show Pomodoro settings."`
-	Start    PomodoroStartCmd    `cmd:"" help:"Start a Pomodoro session."`
-	Stop     PomodoroStopCmd     `cmd:"" help:"Stop the current Pomodoro session."`
-	Pause    PomodoroPauseCmd    `cmd:"" help:"Pause the current Pomodoro session."`
+type Cmd struct {
+	Status   StatusCmd   `cmd:"" help:"Show Pomodoro status."`
+	Settings SettingsCmd `cmd:"" help:"Show Pomodoro settings."`
+	Start    StartCmd    `cmd:"" help:"Start a Pomodoro session."`
+	Stop     StopCmd     `cmd:"" help:"Stop the current Pomodoro session."`
+	Pause    PauseCmd    `cmd:"" help:"Pause the current Pomodoro session."`
 }
 
 type (
-	PomodoroStatusCmd   struct{}
-	PomodoroSettingsCmd struct{}
+	StatusCmd   struct{}
+	SettingsCmd struct{}
 )
 
-type PomodoroStartCmd struct {
+type StartCmd struct {
 	TimeLeft int `name:"time-left" help:"Remaining time in seconds."`
 }
 
 type (
-	PomodoroStopCmd  struct{}
-	PomodoroPauseCmd struct{}
+	StopCmd  struct{}
+	PauseCmd struct{}
 )
 
 const (
@@ -90,7 +90,7 @@ type pomodoroMutationResponse struct {
 	} `json:"data"`
 }
 
-func (c *PomodoroStatusCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *StatusCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp pomodoroStatusResponse
 	if err := apiClient.GraphQL(context.Background(), pomodoroStatusQuery, nil, &resp); err != nil {
 		return fmt.Errorf("query pomodoro status: %w", err)
@@ -99,7 +99,7 @@ func (c *PomodoroStatusCmd) Run(apiClient *client.Client, printer output.Printer
 	return printer.Print(resp.Data.PomodoroToday)
 }
 
-func (c *PomodoroSettingsCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *SettingsCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp pomodoroSettingsResponse
 	if err := apiClient.GraphQL(context.Background(), pomodoroSettingsQuery, nil, &resp); err != nil {
 		return fmt.Errorf("query pomodoro settings: %w", err)
@@ -108,7 +108,7 @@ func (c *PomodoroSettingsCmd) Run(apiClient *client.Client, printer output.Print
 	return printer.Print(resp.Data.PomodoroSettings)
 }
 
-func (c *PomodoroStartCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *StartCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	timeLeft := c.TimeLeft
 	if timeLeft == 0 {
 		var resp pomodoroSettingsResponse
@@ -129,13 +129,10 @@ func (c *PomodoroStartCmd) Run(apiClient *client.Client, printer output.Printer)
 		return errors.New("start pomodoro: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Started Pomodoro with %d seconds remaining.", timeLeft),
-	})
+	return nil
 }
 
-func (c *PomodoroStopCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *StopCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp pomodoroMutationResponse
 	if err := apiClient.GraphQL(context.Background(), stopPomodoroMutation, nil, &resp); err != nil {
 		return fmt.Errorf("stop pomodoro: %w", err)
@@ -144,13 +141,10 @@ func (c *PomodoroStopCmd) Run(apiClient *client.Client, printer output.Printer) 
 		return errors.New("stop pomodoro: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: "Stopped Pomodoro.",
-	})
+	return nil
 }
 
-func (c *PomodoroPauseCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *PauseCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp pomodoroMutationResponse
 	if err := apiClient.GraphQL(context.Background(), pausePomodoroMutation, nil, &resp); err != nil {
 		return fmt.Errorf("pause pomodoro: %w", err)
@@ -159,8 +153,5 @@ func (c *PomodoroPauseCmd) Run(apiClient *client.Client, printer output.Printer)
 		return errors.New("pause pomodoro: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: "Paused Pomodoro.",
-	})
+	return nil
 }

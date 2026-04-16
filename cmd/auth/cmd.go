@@ -1,4 +1,4 @@
-package cmd
+package auth
 
 import (
 	"context"
@@ -10,32 +10,28 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jackrosenthal/plain-cli/internal/client"
+	"github.com/jackrosenthal/plain-cli/internal/cmdutil"
 	"github.com/jackrosenthal/plain-cli/internal/config"
 	"github.com/jackrosenthal/plain-cli/internal/output"
 )
 
-type AuthCmd struct {
-	Login  AuthLoginCmd  `cmd:"" help:"Authenticate with a Plain device."`
-	Status AuthStatusCmd `cmd:"" help:"Check whether the current token is valid."`
+type Cmd struct {
+	Login  LoginCmd  `cmd:"" help:"Authenticate with a Plain device."`
+	Status StatusCmd `cmd:"" help:"Check whether the current token is valid."`
 }
 
-type AuthLoginCmd struct {
+type LoginCmd struct {
 	Password bool `help:"Prompt for a password before authenticating."`
 }
 
-type AuthStatusCmd struct{}
-
-type authMessage struct {
-	Status  string `json:"status"`
-	Message string `json:"message"`
-}
+type StatusCmd struct{}
 
 type authStatusResult struct {
 	Status string `json:"status"`
 	Valid  bool   `json:"valid"`
 }
 
-func (c *AuthLoginCmd) Run(cli *CLI, printer output.Printer) error {
+func (c *LoginCmd) Run(cli *cmdutil.CLIContext, printer output.Printer) error {
 	cfg, err := resolvedConfig(cli)
 	if err != nil {
 		return err
@@ -76,13 +72,10 @@ func (c *AuthLoginCmd) Run(cli *CLI, printer output.Printer) error {
 		return err
 	}
 
-	return printer.Print(authMessage{
-		Status:  "ok",
-		Message: "Authentication succeeded.",
-	})
+	return nil
 }
 
-func (c *AuthStatusCmd) Run(cli *CLI, printer output.Printer) error {
+func (c *StatusCmd) Run(cli *cmdutil.CLIContext, printer output.Printer) error {
 	cfg, err := resolvedConfig(cli)
 	if err != nil {
 		return err
@@ -115,7 +108,7 @@ func (c *AuthStatusCmd) Run(cli *CLI, printer output.Printer) error {
 	})
 }
 
-func resolvedConfig(cli *CLI) (config.Config, error) {
+func resolvedConfig(cli *cmdutil.CLIContext) (config.Config, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return config.Config{}, err

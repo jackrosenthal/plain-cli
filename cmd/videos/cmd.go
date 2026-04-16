@@ -1,4 +1,4 @@
-package cmd
+package videos
 
 import (
 	"context"
@@ -7,8 +7,12 @@ import (
 	"io"
 	"os"
 
+	"github.com/charmbracelet/bubbles/progress"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/term"
 	"github.com/jackrosenthal/plain-cli/internal/api"
 	"github.com/jackrosenthal/plain-cli/internal/client"
+	"github.com/jackrosenthal/plain-cli/internal/cmdutil"
 	"github.com/jackrosenthal/plain-cli/internal/output"
 )
 
@@ -63,38 +67,38 @@ const (
 }`
 )
 
-type VideosCmd struct {
-	LS       VideosLSCmd       `cmd:"" help:"List videos."`
-	Buckets  VideosBucketsCmd  `cmd:"" help:"List video buckets."`
-	Download VideosDownloadCmd `cmd:"" help:"Download a video."`
-	Trash    VideosTrashCmd    `cmd:"" help:"Trash videos."`
-	Restore  VideosRestoreCmd  `cmd:"" help:"Restore videos from trash."`
-	Delete   VideosDeleteCmd   `cmd:"" help:"Delete videos permanently."`
+type Cmd struct {
+	LS       LSCmd       `cmd:"" help:"List videos."`
+	Buckets  BucketsCmd  `cmd:"" help:"List video buckets."`
+	Download DownloadCmd `cmd:"" help:"Download a video."`
+	Trash    TrashCmd    `cmd:"" help:"Trash videos."`
+	Restore  RestoreCmd  `cmd:"" help:"Restore videos from trash."`
+	Delete   DeleteCmd   `cmd:"" help:"Delete videos permanently."`
 }
 
-type VideosLSCmd struct {
+type LSCmd struct {
 	Query  string `help:"Search query."`
 	Sort   string `help:"Sort field."`
 	Limit  int    `help:"Maximum number of results to return."`
 	Offset int    `help:"Number of results to skip."`
 }
 
-type VideosBucketsCmd struct{}
+type BucketsCmd struct{}
 
-type VideosDownloadCmd struct {
+type DownloadCmd struct {
 	ID  string `arg:"" help:"Video ID."`
 	Out string `help:"Local output path. Writes to stdout when omitted."`
 }
 
-type VideosTrashCmd struct {
+type TrashCmd struct {
 	Query string `arg:"" help:"Selection query."`
 }
 
-type VideosRestoreCmd struct {
+type RestoreCmd struct {
 	Query string `arg:"" help:"Selection query."`
 }
 
-type VideosDeleteCmd struct {
+type DeleteCmd struct {
 	Query string `arg:"" help:"Selection query."`
 }
 
@@ -106,19 +110,19 @@ type videosListResponse struct {
 
 type videoBucketsResponse struct {
 	Data struct {
-		MediaBuckets []mediaBucket `json:"mediaBuckets"`
+		MediaBuckets []cmdutil.MediaBucket `json:"mediaBuckets"`
 	} `json:"data"`
 }
 
 type videoMutationResponse struct {
 	Data struct {
-		TrashMediaItems   mediaMutationResult `json:"trashMediaItems"`
-		RestoreMediaItems mediaMutationResult `json:"restoreMediaItems"`
-		DeleteMediaItems  mediaMutationResult `json:"deleteMediaItems"`
+		TrashMediaItems   cmdutil.MediaMutationResult `json:"trashMediaItems"`
+		RestoreMediaItems cmdutil.MediaMutationResult `json:"restoreMediaItems"`
+		DeleteMediaItems  cmdutil.MediaMutationResult `json:"deleteMediaItems"`
 	} `json:"data"`
 }
 
-func (c *VideosLSCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *LSCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	videos, err := listVideos(
 		context.Background(),
 		apiClient,
@@ -134,7 +138,7 @@ func (c *VideosLSCmd) Run(apiClient *client.Client, printer output.Printer) erro
 	return printer.PrintList(videos)
 }
 
-func (c *VideosBucketsCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *BucketsCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp videoBucketsResponse
 	if err := apiClient.GraphQL(context.Background(), videoBucketsQuery, map[string]any{
 		"type": api.DataTypeVideo.ToGraphQL(),
@@ -145,7 +149,7 @@ func (c *VideosBucketsCmd) Run(apiClient *client.Client, printer output.Printer)
 	return printer.PrintList(resp.Data.MediaBuckets)
 }
 
-func (c *VideosDownloadCmd) Run(cli *CLI, apiClient *client.Client, printer output.Printer) error {
+func (c *DownloadCmd) Run(cli *cmdutil.CLIContext, apiClient *client.Client, printer output.Printer) error {
 	reader, err := client.DownloadFile(context.Background(), apiClient, "", c.ID)
 	if err != nil {
 		return fmt.Errorf("download video: %w", err)
@@ -167,29 +171,50 @@ func (c *VideosDownloadCmd) Run(cli *CLI, apiClient *client.Client, printer outp
 		_ = file.Close()
 	}()
 
-	writer := io.Writer(file)
-	if shouldShowTransferProgress(cli) {
-		writer = &progressWriter{
-			label: c.Out,
-			w:     file,
+	if term.IsTerminal(os.Stderr.Fd()) {
+		prog := tea.NewProgram(
+			vidDownloadProgressModel{bar: progress.New(progress.WithDefaultGradient()), label: c.Out},
+			tea.WithOutput(os.Stderr),
+			tea.WithInput(nil),
+		)
+		copyDone := make(chan error, 1)
+		go func() {
+			var received int64
+			buf := make([]byte, 32*1024)
+			var copyErr error
+			for {
+				n, readErr := reader.Read(buf)
+				if n > 0 {
+					if _, writeErr := file.Write(buf[:n]); writeErr != nil {
+						copyErr = writeErr
+						break
+					}
+					received += int64(n)
+					prog.Send(vidDownloadProgressMsg(received))
+				}
+				if readErr != nil {
+					break
+				}
+			}
+			prog.Send(vidDownloadDoneMsg{})
+			copyDone <- copyErr
+		}()
+		if _, err := prog.Run(); err != nil {
+			return err
+		}
+		if err := <-copyDone; err != nil {
+			return err
+		}
+	} else {
+		if _, err := io.Copy(file, reader); err != nil {
+			return err
 		}
 	}
 
-	if _, err := io.Copy(writer, reader); err != nil {
-		return err
-	}
-
-	if pw, ok := writer.(*progressWriter); ok {
-		pw.Finish()
-	}
-
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Downloaded video to %s.", c.Out),
-	})
+	return nil
 }
 
-func (c *VideosTrashCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *TrashCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	result, err := runVideoMediaMutation(context.Background(), apiClient, trashVideosMutation, c.Query)
 	if err != nil {
 		return err
@@ -198,7 +223,7 @@ func (c *VideosTrashCmd) Run(apiClient *client.Client, printer output.Printer) e
 	return printer.Print(result)
 }
 
-func (c *VideosRestoreCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *RestoreCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	result, err := runVideoMediaMutation(context.Background(), apiClient, restoreVideosMutation, c.Query)
 	if err != nil {
 		return err
@@ -207,7 +232,7 @@ func (c *VideosRestoreCmd) Run(apiClient *client.Client, printer output.Printer)
 	return printer.Print(result)
 }
 
-func (c *VideosDeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *DeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	result, err := runVideoMediaMutation(context.Background(), apiClient, deleteVideosMutation, c.Query)
 	if err != nil {
 		return err
@@ -232,16 +257,16 @@ func listVideos(
 		return fetchVideosPage(ctx, apiClient, query, sortBy, offset, limit)
 	}
 
-	videos := make([]api.Video, 0, filesPageSize)
+	videos := make([]api.Video, 0, cmdutil.FilesPageSize)
 	currentOffset := offset
 	for {
-		page, err := fetchVideosPage(ctx, apiClient, query, sortBy, currentOffset, filesPageSize)
+		page, err := fetchVideosPage(ctx, apiClient, query, sortBy, currentOffset, cmdutil.FilesPageSize)
 		if err != nil {
 			return nil, err
 		}
 
 		videos = append(videos, page...)
-		if len(page) < filesPageSize {
+		if len(page) < cmdutil.FilesPageSize {
 			return videos, nil
 		}
 
@@ -275,13 +300,13 @@ func runVideoMediaMutation(
 	apiClient *client.Client,
 	mutation string,
 	query string,
-) (mediaMutationResult, error) {
+) (cmdutil.MediaMutationResult, error) {
 	var resp videoMutationResponse
 	if err := apiClient.GraphQL(ctx, mutation, map[string]any{
 		"query": query,
 		"type":  api.DataTypeVideo.ToGraphQL(),
 	}, &resp); err != nil {
-		return mediaMutationResult{}, fmt.Errorf("run video media mutation: %w", err)
+		return cmdutil.MediaMutationResult{}, fmt.Errorf("run video media mutation: %w", err)
 	}
 
 	switch mutation {
@@ -292,6 +317,36 @@ func runVideoMediaMutation(
 	case deleteVideosMutation:
 		return resp.Data.DeleteMediaItems, nil
 	default:
-		return mediaMutationResult{}, errors.New("run video media mutation: unknown mutation")
+		return cmdutil.MediaMutationResult{}, errors.New("run video media mutation: unknown mutation")
 	}
+}
+
+type (
+	vidDownloadProgressMsg int64
+	vidDownloadDoneMsg     struct{}
+)
+
+type vidDownloadProgressModel struct {
+	bar      progress.Model
+	label    string
+	received int64
+}
+
+func (m vidDownloadProgressModel) Init() tea.Cmd { return nil }
+
+func (m vidDownloadProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch v := msg.(type) {
+	case vidDownloadProgressMsg:
+		m.received = int64(v)
+		return m, nil
+	case vidDownloadDoneMsg:
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+func (m vidDownloadProgressModel) View() string {
+	const cycleBytes = 1 << 20
+	pct := float64(m.received%cycleBytes) / float64(cycleBytes)
+	return m.label + " " + m.bar.ViewAs(pct) + fmt.Sprintf(" %d B", m.received) + "\n"
 }

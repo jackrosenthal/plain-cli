@@ -1,4 +1,4 @@
-package cmd
+package calls
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackrosenthal/plain-cli/internal/api"
 	"github.com/jackrosenthal/plain-cli/internal/client"
+	"github.com/jackrosenthal/plain-cli/internal/cmdutil"
 	"github.com/jackrosenthal/plain-cli/internal/output"
 )
 
@@ -45,23 +46,23 @@ const (
 }`
 )
 
-type CallsCmd struct {
-	LS     CallsLSCmd     `cmd:"" help:"List calls."`
-	Call   CallsCallCmd   `cmd:"" help:"Place a call."`
-	Delete CallsDeleteCmd `cmd:"" help:"Delete calls."`
+type Cmd struct {
+	LS     LSCmd     `cmd:"" help:"List calls."`
+	Call   CallCmd   `cmd:"" help:"Place a call."`
+	Delete DeleteCmd `cmd:"" help:"Delete calls."`
 }
 
-type CallsLSCmd struct {
+type LSCmd struct {
 	Query  string `help:"Search query."`
 	Limit  int    `help:"Maximum number of results to return."`
 	Offset int    `help:"Number of results to skip."`
 }
 
-type CallsCallCmd struct {
+type CallCmd struct {
 	Number string `arg:"" help:"Phone number to call."`
 }
 
-type CallsDeleteCmd struct {
+type DeleteCmd struct {
 	Query string `arg:"" help:"Selection query."`
 }
 
@@ -91,7 +92,7 @@ type callDisplay struct {
 	Tags      []api.Tag `json:"tags"`
 }
 
-func (c *CallsLSCmd) Run(cli *CLI, apiClient *client.Client, printer output.Printer) error {
+func (c *LSCmd) Run(cli *cmdutil.CLIContext, apiClient *client.Client, printer output.Printer) error {
 	calls, err := listCalls(context.Background(), apiClient, c.Query, c.Offset, c.Limit)
 	if err != nil {
 		return err
@@ -104,7 +105,7 @@ func (c *CallsLSCmd) Run(cli *CLI, apiClient *client.Client, printer output.Prin
 	return printer.PrintList(displayCalls(calls))
 }
 
-func (c *CallsCallCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *CallCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp callsMutationResponse
 	if err := apiClient.GraphQL(context.Background(), callMutation, map[string]any{
 		"number": c.Number,
@@ -115,13 +116,10 @@ func (c *CallsCallCmd) Run(apiClient *client.Client, printer output.Printer) err
 		return errors.New("place call: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Calling %s.", c.Number),
-	})
+	return nil
 }
 
-func (c *CallsDeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *DeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp callsMutationResponse
 	if err := apiClient.GraphQL(context.Background(), deleteCallsMutation, map[string]any{
 		"query": c.Query,
@@ -132,10 +130,7 @@ func (c *CallsDeleteCmd) Run(apiClient *client.Client, printer output.Printer) e
 		return errors.New("delete calls: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Deleted calls matching %q.", c.Query),
-	})
+	return nil
 }
 
 func listCalls(

@@ -1,4 +1,4 @@
-package cmd
+package screen
 
 import (
 	"context"
@@ -33,22 +33,22 @@ const (
 }`
 )
 
-type ScreenCmd struct {
-	Status  ScreenStatusCmd  `cmd:"" help:"Show screen mirror status."`
-	Start   ScreenStartCmd   `cmd:"" help:"Start screen mirroring."`
-	Stop    ScreenStopCmd    `cmd:"" help:"Stop screen mirroring."`
-	Quality ScreenQualityCmd `cmd:"" help:"Set screen mirror quality."`
+type Cmd struct {
+	Status  StatusCmd  `cmd:"" help:"Show screen mirror status."`
+	Start   StartCmd   `cmd:"" help:"Start screen mirroring."`
+	Stop    StopCmd    `cmd:"" help:"Stop screen mirroring."`
+	Quality QualityCmd `cmd:"" help:"Set screen mirror quality."`
 }
 
-type ScreenStatusCmd struct{}
+type StatusCmd struct{}
 
-type ScreenStartCmd struct {
+type StartCmd struct {
 	Audio bool `help:"Include audio in the stream."`
 }
 
-type ScreenStopCmd struct{}
+type StopCmd struct{}
 
-type ScreenQualityCmd struct {
+type QualityCmd struct {
 	Mode string `arg:"" help:"Quality mode." enum:"auto,hd,smooth"`
 }
 
@@ -74,7 +74,7 @@ type screenStatusOutput struct {
 	Quality        api.ScreenMirrorQuality `json:"quality"`
 }
 
-func (c *ScreenStatusCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *StatusCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp screenStatusResponse
 	if err := apiClient.GraphQL(context.Background(), screenStatusQuery, nil, &resp); err != nil {
 		return fmt.Errorf("query screen mirror status: %w", err)
@@ -87,7 +87,7 @@ func (c *ScreenStatusCmd) Run(apiClient *client.Client, printer output.Printer) 
 	})
 }
 
-func (c *ScreenStartCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *StartCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp screenMutationResponse
 	if err := apiClient.GraphQL(context.Background(), startScreenMirrorMutation, map[string]any{
 		"audio": c.Audio,
@@ -98,18 +98,10 @@ func (c *ScreenStartCmd) Run(apiClient *client.Client, printer output.Printer) e
 		return errors.New("start screen mirroring: mutation returned false")
 	}
 
-	message := "Started screen mirroring."
-	if c.Audio {
-		message = "Started screen mirroring with audio."
-	}
-
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: message,
-	})
+	return nil
 }
 
-func (c *ScreenStopCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *StopCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp screenMutationResponse
 	if err := apiClient.GraphQL(context.Background(), stopScreenMirrorMutation, nil, &resp); err != nil {
 		return fmt.Errorf("stop screen mirroring: %w", err)
@@ -118,13 +110,10 @@ func (c *ScreenStopCmd) Run(apiClient *client.Client, printer output.Printer) er
 		return errors.New("stop screen mirroring: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: "Stopped screen mirroring.",
-	})
+	return nil
 }
 
-func (c *ScreenQualityCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *QualityCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp screenMutationResponse
 	if err := apiClient.GraphQL(context.Background(), updateScreenMirrorQualityMutation, map[string]any{
 		"mode": api.ScreenMirrorMode(c.Mode).ToGraphQL(),
@@ -135,8 +124,5 @@ func (c *ScreenQualityCmd) Run(apiClient *client.Client, printer output.Printer)
 		return errors.New("update screen mirror quality: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Set screen mirror quality to %s.", c.Mode),
-	})
+	return nil
 }

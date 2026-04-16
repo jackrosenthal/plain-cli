@@ -1,4 +1,4 @@
-package cmd
+package contacts
 
 import (
 	"context"
@@ -77,21 +77,21 @@ const (
 }`
 )
 
-type ContactsCmd struct {
-	LS      ContactsLSCmd      `cmd:"" help:"List contacts."`
-	Sources ContactsSourcesCmd `cmd:"" help:"List contact sources."`
-	Delete  ContactsDeleteCmd  `cmd:"" help:"Delete contacts."`
+type Cmd struct {
+	LS      LSCmd      `cmd:"" help:"List contacts."`
+	Sources SourcesCmd `cmd:"" help:"List contact sources."`
+	Delete  DeleteCmd  `cmd:"" help:"Delete contacts."`
 }
 
-type ContactsLSCmd struct {
+type LSCmd struct {
 	Query  string `help:"Search query."`
 	Limit  int    `help:"Maximum number of results to return."`
 	Offset int    `help:"Number of results to skip."`
 }
 
-type ContactsSourcesCmd struct{}
+type SourcesCmd struct{}
 
-type ContactsDeleteCmd struct {
+type DeleteCmd struct {
 	Query string `arg:"" help:"Selection query."`
 }
 
@@ -118,7 +118,7 @@ type contactSource struct {
 	Type string `json:"type"`
 }
 
-func (c *ContactsLSCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *LSCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	contacts, err := listContacts(context.Background(), apiClient, c.Query, c.Offset, c.Limit)
 	if err != nil {
 		return err
@@ -127,7 +127,7 @@ func (c *ContactsLSCmd) Run(apiClient *client.Client, printer output.Printer) er
 	return printer.PrintList(contacts)
 }
 
-func (c *ContactsSourcesCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *SourcesCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp contactSourcesResponse
 	if err := apiClient.GraphQL(context.Background(), contactSourcesQuery, nil, &resp); err != nil {
 		return fmt.Errorf("query contact sources: %w", err)
@@ -136,7 +136,7 @@ func (c *ContactsSourcesCmd) Run(apiClient *client.Client, printer output.Printe
 	return printer.PrintList(resp.Data.ContactSources)
 }
 
-func (c *ContactsDeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *DeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp deleteContactsResponse
 	if err := apiClient.GraphQL(context.Background(), deleteContactsMutation, map[string]any{
 		"query": c.Query,
@@ -147,10 +147,7 @@ func (c *ContactsDeleteCmd) Run(apiClient *client.Client, printer output.Printer
 		return errors.New("delete contacts: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Deleted contacts matching %q.", c.Query),
-	})
+	return nil
 }
 
 func listContacts(

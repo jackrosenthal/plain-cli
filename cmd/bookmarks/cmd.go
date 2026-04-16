@@ -1,4 +1,4 @@
-package cmd
+package bookmarks
 
 import (
 	"context"
@@ -101,22 +101,22 @@ const (
 }`
 )
 
-type BookmarksCmd struct {
-	LS     BookmarksLSCmd     `cmd:"" help:"List bookmarks."`
-	Add    BookmarksAddCmd    `cmd:"" help:"Add bookmarks."`
-	Update BookmarksUpdateCmd `cmd:"" help:"Update a bookmark."`
-	Delete BookmarksDeleteCmd `cmd:"" help:"Delete bookmarks."`
-	Groups BookmarksGroupsCmd `cmd:"" help:"Manage bookmark groups."`
+type Cmd struct {
+	LS     LSCmd     `cmd:"" help:"List bookmarks."`
+	Add    AddCmd    `cmd:"" help:"Add bookmarks."`
+	Update UpdateCmd `cmd:"" help:"Update a bookmark."`
+	Delete DeleteCmd `cmd:"" help:"Delete bookmarks."`
+	Groups GroupsCmd `cmd:"" help:"Manage bookmark groups."`
 }
 
-type BookmarksLSCmd struct{}
+type LSCmd struct{}
 
-type BookmarksAddCmd struct {
+type AddCmd struct {
 	URLs    []string `arg:"" name:"urls" help:"Bookmark URLs to add."`
 	GroupID string   `name:"group-id" help:"Destination group ID." required:""`
 }
 
-type BookmarksUpdateCmd struct {
+type UpdateCmd struct {
 	ID        string `arg:"" help:"Bookmark ID."`
 	URL       string `help:"Bookmark URL."`
 	Title     string `help:"Bookmark title."`
@@ -125,31 +125,31 @@ type BookmarksUpdateCmd struct {
 	SortOrder *int   `name:"sort-order" help:"Sort order."`
 }
 
-type BookmarksDeleteCmd struct {
+type DeleteCmd struct {
 	IDs []string `arg:"" name:"ids" help:"Bookmark IDs to delete."`
 }
 
-type BookmarksGroupsCmd struct {
-	LS     BookmarksGroupsLSCmd     `cmd:"" help:"List bookmark groups."`
-	Create BookmarksGroupsCreateCmd `cmd:"" help:"Create a bookmark group."`
-	Update BookmarksGroupsUpdateCmd `cmd:"" help:"Update a bookmark group."`
-	Delete BookmarksGroupsDeleteCmd `cmd:"" help:"Delete a bookmark group."`
+type GroupsCmd struct {
+	LS     GroupsLSCmd     `cmd:"" help:"List bookmark groups."`
+	Create GroupsCreateCmd `cmd:"" help:"Create a bookmark group."`
+	Update GroupsUpdateCmd `cmd:"" help:"Update a bookmark group."`
+	Delete GroupsDeleteCmd `cmd:"" help:"Delete a bookmark group."`
 }
 
-type BookmarksGroupsLSCmd struct{}
+type GroupsLSCmd struct{}
 
-type BookmarksGroupsCreateCmd struct {
+type GroupsCreateCmd struct {
 	Name string `arg:"" help:"Group name."`
 }
 
-type BookmarksGroupsUpdateCmd struct {
+type GroupsUpdateCmd struct {
 	ID        string `arg:"" help:"Group ID."`
 	Name      string `help:"Group name."`
 	Collapsed *bool  `help:"Collapse or expand the group in the UI."`
 	SortOrder *int   `name:"sort-order" help:"Sort order."`
 }
 
-type BookmarksGroupsDeleteCmd struct {
+type GroupsDeleteCmd struct {
 	ID string `arg:"" help:"Group ID."`
 }
 
@@ -181,7 +181,7 @@ type bookmarkGroupMutationResponse struct {
 	} `json:"data"`
 }
 
-func (c *BookmarksLSCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *LSCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	bookmarks, err := listBookmarks(context.Background(), apiClient)
 	if err != nil {
 		return err
@@ -190,7 +190,7 @@ func (c *BookmarksLSCmd) Run(apiClient *client.Client, printer output.Printer) e
 	return printer.PrintList(bookmarks)
 }
 
-func (c *BookmarksAddCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *AddCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp bookmarkMutationResponse
 	if err := apiClient.GraphQL(context.Background(), addBookmarksMutation, map[string]any{
 		"groupId": c.GroupID,
@@ -202,7 +202,7 @@ func (c *BookmarksAddCmd) Run(apiClient *client.Client, printer output.Printer) 
 	return printer.PrintList(resp.Data.AddBookmarks)
 }
 
-func (c *BookmarksUpdateCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *UpdateCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	bookmark, err := getBookmark(context.Background(), apiClient, c.ID)
 	if err != nil {
 		return err
@@ -241,7 +241,7 @@ func (c *BookmarksUpdateCmd) Run(apiClient *client.Client, printer output.Printe
 	return printer.Print(resp.Data.UpdateBookmark)
 }
 
-func (c *BookmarksDeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *DeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp bookmarkMutationResponse
 	if err := apiClient.GraphQL(context.Background(), deleteBookmarksMutation, map[string]any{
 		"ids": c.IDs,
@@ -252,13 +252,10 @@ func (c *BookmarksDeleteCmd) Run(apiClient *client.Client, printer output.Printe
 		return errors.New("delete bookmarks: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Deleted %d bookmark(s).", len(c.IDs)),
-	})
+	return nil
 }
 
-func (c *BookmarksGroupsLSCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *GroupsLSCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	groups, err := listBookmarkGroups(context.Background(), apiClient)
 	if err != nil {
 		return err
@@ -267,7 +264,7 @@ func (c *BookmarksGroupsLSCmd) Run(apiClient *client.Client, printer output.Prin
 	return printer.PrintList(groups)
 }
 
-func (c *BookmarksGroupsCreateCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *GroupsCreateCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp bookmarkGroupMutationResponse
 	if err := apiClient.GraphQL(context.Background(), createBookmarkGroupMutation, map[string]any{
 		"name": c.Name,
@@ -278,7 +275,7 @@ func (c *BookmarksGroupsCreateCmd) Run(apiClient *client.Client, printer output.
 	return printer.Print(resp.Data.CreateBookmarkGroup)
 }
 
-func (c *BookmarksGroupsUpdateCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *GroupsUpdateCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	group, err := getBookmarkGroup(context.Background(), apiClient, c.ID)
 	if err != nil {
 		return err
@@ -307,7 +304,7 @@ func (c *BookmarksGroupsUpdateCmd) Run(apiClient *client.Client, printer output.
 	return printer.Print(resp.Data.UpdateBookmarkGroup)
 }
 
-func (c *BookmarksGroupsDeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *GroupsDeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp bookmarkGroupMutationResponse
 	if err := apiClient.GraphQL(context.Background(), deleteBookmarkGroupMutation, map[string]any{
 		"id": c.ID,
@@ -318,10 +315,7 @@ func (c *BookmarksGroupsDeleteCmd) Run(apiClient *client.Client, printer output.
 		return errors.New("delete bookmark group: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Deleted bookmark group %s.", c.ID),
-	})
+	return nil
 }
 
 func listBookmarks(ctx context.Context, apiClient *client.Client) ([]api.Bookmark, error) {

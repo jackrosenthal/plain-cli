@@ -1,4 +1,4 @@
-package cmd
+package images
 
 import (
 	"context"
@@ -7,8 +7,12 @@ import (
 	"io"
 	"os"
 
+	"github.com/charmbracelet/bubbles/progress"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/term"
 	"github.com/jackrosenthal/plain-cli/internal/api"
 	"github.com/jackrosenthal/plain-cli/internal/client"
+	"github.com/jackrosenthal/plain-cli/internal/cmdutil"
 	"github.com/jackrosenthal/plain-cli/internal/output"
 )
 
@@ -87,56 +91,56 @@ const (
 }`
 )
 
-type ImagesCmd struct {
-	LS       ImagesLSCmd       `cmd:"" help:"List images."`
-	Buckets  ImagesBucketsCmd  `cmd:"" help:"List image buckets."`
-	Download ImagesDownloadCmd `cmd:"" help:"Download an image."`
-	Trash    ImagesTrashCmd    `cmd:"" help:"Trash images."`
-	Restore  ImagesRestoreCmd  `cmd:"" help:"Restore images from trash."`
-	Delete   ImagesDeleteCmd   `cmd:"" help:"Delete images permanently."`
-	Search   ImagesSearchCmd   `cmd:"" help:"Manage image search."`
+type Cmd struct {
+	LS       LSCmd       `cmd:"" help:"List images."`
+	Buckets  BucketsCmd  `cmd:"" help:"List image buckets."`
+	Download DownloadCmd `cmd:"" help:"Download an image."`
+	Trash    TrashCmd    `cmd:"" help:"Trash images."`
+	Restore  RestoreCmd  `cmd:"" help:"Restore images from trash."`
+	Delete   DeleteCmd   `cmd:"" help:"Delete images permanently."`
+	Search   SearchCmd   `cmd:"" help:"Manage image search."`
 }
 
-type ImagesLSCmd struct {
+type LSCmd struct {
 	Query  string `help:"Search query."`
 	Sort   string `help:"Sort field."`
 	Limit  int    `help:"Maximum number of results to return."`
 	Offset int    `help:"Number of results to skip."`
 }
 
-type ImagesBucketsCmd struct{}
+type BucketsCmd struct{}
 
-type ImagesDownloadCmd struct {
+type DownloadCmd struct {
 	ID  string `arg:"" help:"Image ID."`
 	Out string `help:"Local output path. Writes to stdout when omitted."`
 }
 
-type ImagesTrashCmd struct {
+type TrashCmd struct {
 	Query string `arg:"" help:"Selection query."`
 }
 
-type ImagesRestoreCmd struct {
+type RestoreCmd struct {
 	Query string `arg:"" help:"Selection query."`
 }
 
-type ImagesDeleteCmd struct {
+type DeleteCmd struct {
 	Query string `arg:"" help:"Selection query."`
 }
 
-type ImagesSearchCmd struct {
-	Status  ImagesSearchStatusCmd  `cmd:"" help:"Show image search status."`
-	Enable  ImagesSearchEnableCmd  `cmd:"" help:"Enable image search."`
-	Disable ImagesSearchDisableCmd `cmd:"" help:"Disable image search."`
-	Index   ImagesSearchIndexCmd   `cmd:"" help:"Start indexing images."`
+type SearchCmd struct {
+	Status  SearchStatusCmd  `cmd:"" help:"Show image search status."`
+	Enable  SearchEnableCmd  `cmd:"" help:"Enable image search."`
+	Disable SearchDisableCmd `cmd:"" help:"Disable image search."`
+	Index   SearchIndexCmd   `cmd:"" help:"Start indexing images."`
 }
 
 type (
-	ImagesSearchStatusCmd  struct{}
-	ImagesSearchEnableCmd  struct{}
-	ImagesSearchDisableCmd struct{}
+	SearchStatusCmd  struct{}
+	SearchEnableCmd  struct{}
+	SearchDisableCmd struct{}
 )
 
-type ImagesSearchIndexCmd struct {
+type SearchIndexCmd struct {
 	Force bool `help:"Force a full reindex."`
 }
 
@@ -148,7 +152,7 @@ type imagesListResponse struct {
 
 type imageBucketsResponse struct {
 	Data struct {
-		MediaBuckets []mediaBucket `json:"mediaBuckets"`
+		MediaBuckets []cmdutil.MediaBucket `json:"mediaBuckets"`
 	} `json:"data"`
 }
 
@@ -160,28 +164,16 @@ type imageSearchStatusResponse struct {
 
 type imageMutationResponse struct {
 	Data struct {
-		TrashMediaItems    mediaMutationResult `json:"trashMediaItems"`
-		RestoreMediaItems  mediaMutationResult `json:"restoreMediaItems"`
-		DeleteMediaItems   mediaMutationResult `json:"deleteMediaItems"`
-		EnableImageSearch  bool                `json:"enableImageSearch"`
-		DisableImageSearch bool                `json:"disableImageSearch"`
-		StartImageIndex    bool                `json:"startImageIndex"`
+		TrashMediaItems    cmdutil.MediaMutationResult `json:"trashMediaItems"`
+		RestoreMediaItems  cmdutil.MediaMutationResult `json:"restoreMediaItems"`
+		DeleteMediaItems   cmdutil.MediaMutationResult `json:"deleteMediaItems"`
+		EnableImageSearch  bool                        `json:"enableImageSearch"`
+		DisableImageSearch bool                        `json:"disableImageSearch"`
+		StartImageIndex    bool                        `json:"startImageIndex"`
 	} `json:"data"`
 }
 
-type mediaBucket struct {
-	ID        string   `json:"id"`
-	Name      string   `json:"name"`
-	ItemCount int      `json:"itemCount"`
-	TopItems  []string `json:"topItems"`
-}
-
-type mediaMutationResult struct {
-	Type  string `json:"type"`
-	Query string `json:"query"`
-}
-
-func (c *ImagesLSCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *LSCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	images, err := listImages(
 		context.Background(),
 		apiClient,
@@ -197,7 +189,7 @@ func (c *ImagesLSCmd) Run(apiClient *client.Client, printer output.Printer) erro
 	return printer.PrintList(images)
 }
 
-func (c *ImagesBucketsCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *BucketsCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp imageBucketsResponse
 	if err := apiClient.GraphQL(context.Background(), imageBucketsQuery, map[string]any{
 		"type": api.DataTypeImage.ToGraphQL(),
@@ -208,7 +200,7 @@ func (c *ImagesBucketsCmd) Run(apiClient *client.Client, printer output.Printer)
 	return printer.PrintList(resp.Data.MediaBuckets)
 }
 
-func (c *ImagesDownloadCmd) Run(cli *CLI, apiClient *client.Client, printer output.Printer) error {
+func (c *DownloadCmd) Run(cli *cmdutil.CLIContext, apiClient *client.Client, printer output.Printer) error {
 	reader, err := client.DownloadFile(context.Background(), apiClient, "", c.ID)
 	if err != nil {
 		return fmt.Errorf("download image: %w", err)
@@ -230,29 +222,50 @@ func (c *ImagesDownloadCmd) Run(cli *CLI, apiClient *client.Client, printer outp
 		_ = file.Close()
 	}()
 
-	writer := io.Writer(file)
-	if shouldShowTransferProgress(cli) {
-		writer = &progressWriter{
-			label: c.Out,
-			w:     file,
+	if term.IsTerminal(os.Stderr.Fd()) {
+		prog := tea.NewProgram(
+			imgDownloadProgressModel{bar: progress.New(progress.WithDefaultGradient()), label: c.Out},
+			tea.WithOutput(os.Stderr),
+			tea.WithInput(nil),
+		)
+		copyDone := make(chan error, 1)
+		go func() {
+			var received int64
+			buf := make([]byte, 32*1024)
+			var copyErr error
+			for {
+				n, readErr := reader.Read(buf)
+				if n > 0 {
+					if _, writeErr := file.Write(buf[:n]); writeErr != nil {
+						copyErr = writeErr
+						break
+					}
+					received += int64(n)
+					prog.Send(imgDownloadProgressMsg(received))
+				}
+				if readErr != nil {
+					break
+				}
+			}
+			prog.Send(imgDownloadDoneMsg{})
+			copyDone <- copyErr
+		}()
+		if _, err := prog.Run(); err != nil {
+			return err
+		}
+		if err := <-copyDone; err != nil {
+			return err
+		}
+	} else {
+		if _, err := io.Copy(file, reader); err != nil {
+			return err
 		}
 	}
 
-	if _, err := io.Copy(writer, reader); err != nil {
-		return err
-	}
-
-	if pw, ok := writer.(*progressWriter); ok {
-		pw.Finish()
-	}
-
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Downloaded image to %s.", c.Out),
-	})
+	return nil
 }
 
-func (c *ImagesTrashCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *TrashCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	result, err := runImageMediaMutation(context.Background(), apiClient, trashImagesMutation, c.Query)
 	if err != nil {
 		return err
@@ -261,7 +274,7 @@ func (c *ImagesTrashCmd) Run(apiClient *client.Client, printer output.Printer) e
 	return printer.Print(result)
 }
 
-func (c *ImagesRestoreCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *RestoreCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	result, err := runImageMediaMutation(context.Background(), apiClient, restoreImagesMutation, c.Query)
 	if err != nil {
 		return err
@@ -270,7 +283,7 @@ func (c *ImagesRestoreCmd) Run(apiClient *client.Client, printer output.Printer)
 	return printer.Print(result)
 }
 
-func (c *ImagesDeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *DeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	result, err := runImageMediaMutation(context.Background(), apiClient, deleteImagesMutation, c.Query)
 	if err != nil {
 		return err
@@ -279,7 +292,7 @@ func (c *ImagesDeleteCmd) Run(apiClient *client.Client, printer output.Printer) 
 	return printer.Print(result)
 }
 
-func (c *ImagesSearchStatusCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *SearchStatusCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp imageSearchStatusResponse
 	if err := apiClient.GraphQL(context.Background(), imageSearchStatusQuery, nil, &resp); err != nil {
 		return fmt.Errorf("query image search status: %w", err)
@@ -288,7 +301,7 @@ func (c *ImagesSearchStatusCmd) Run(apiClient *client.Client, printer output.Pri
 	return printer.Print(resp.Data.ImageSearchStatus)
 }
 
-func (c *ImagesSearchEnableCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *SearchEnableCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp imageMutationResponse
 	if err := apiClient.GraphQL(context.Background(), enableImageSearchMutation, nil, &resp); err != nil {
 		return fmt.Errorf("enable image search: %w", err)
@@ -297,13 +310,10 @@ func (c *ImagesSearchEnableCmd) Run(apiClient *client.Client, printer output.Pri
 		return errors.New("enable image search: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: "Image search enabled.",
-	})
+	return nil
 }
 
-func (c *ImagesSearchDisableCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *SearchDisableCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp imageMutationResponse
 	if err := apiClient.GraphQL(context.Background(), disableImageSearchMutation, nil, &resp); err != nil {
 		return fmt.Errorf("disable image search: %w", err)
@@ -312,13 +322,10 @@ func (c *ImagesSearchDisableCmd) Run(apiClient *client.Client, printer output.Pr
 		return errors.New("disable image search: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: "Image search disabled.",
-	})
+	return nil
 }
 
-func (c *ImagesSearchIndexCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *SearchIndexCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp imageMutationResponse
 	if err := apiClient.GraphQL(context.Background(), startImageIndexMutation, map[string]any{
 		"force": c.Force,
@@ -329,15 +336,7 @@ func (c *ImagesSearchIndexCmd) Run(apiClient *client.Client, printer output.Prin
 		return errors.New("start image index: mutation returned false")
 	}
 
-	message := "Image indexing started."
-	if c.Force {
-		message = "Forced image indexing started."
-	}
-
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: message,
-	})
+	return nil
 }
 
 func listImages(
@@ -356,16 +355,16 @@ func listImages(
 		return fetchImagesPage(ctx, apiClient, query, sortBy, offset, limit)
 	}
 
-	images := make([]api.Image, 0, filesPageSize)
+	images := make([]api.Image, 0, cmdutil.FilesPageSize)
 	currentOffset := offset
 	for {
-		page, err := fetchImagesPage(ctx, apiClient, query, sortBy, currentOffset, filesPageSize)
+		page, err := fetchImagesPage(ctx, apiClient, query, sortBy, currentOffset, cmdutil.FilesPageSize)
 		if err != nil {
 			return nil, err
 		}
 
 		images = append(images, page...)
-		if len(page) < filesPageSize {
+		if len(page) < cmdutil.FilesPageSize {
 			return images, nil
 		}
 
@@ -399,13 +398,13 @@ func runImageMediaMutation(
 	apiClient *client.Client,
 	mutation string,
 	query string,
-) (mediaMutationResult, error) {
+) (cmdutil.MediaMutationResult, error) {
 	var resp imageMutationResponse
 	if err := apiClient.GraphQL(ctx, mutation, map[string]any{
 		"query": query,
 		"type":  api.DataTypeImage.ToGraphQL(),
 	}, &resp); err != nil {
-		return mediaMutationResult{}, fmt.Errorf("run image media mutation: %w", err)
+		return cmdutil.MediaMutationResult{}, fmt.Errorf("run image media mutation: %w", err)
 	}
 
 	switch mutation {
@@ -416,6 +415,36 @@ func runImageMediaMutation(
 	case deleteImagesMutation:
 		return resp.Data.DeleteMediaItems, nil
 	default:
-		return mediaMutationResult{}, errors.New("run image media mutation: unknown mutation")
+		return cmdutil.MediaMutationResult{}, errors.New("run image media mutation: unknown mutation")
 	}
+}
+
+type (
+	imgDownloadProgressMsg int64
+	imgDownloadDoneMsg     struct{}
+)
+
+type imgDownloadProgressModel struct {
+	bar      progress.Model
+	label    string
+	received int64
+}
+
+func (m imgDownloadProgressModel) Init() tea.Cmd { return nil }
+
+func (m imgDownloadProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch v := msg.(type) {
+	case imgDownloadProgressMsg:
+		m.received = int64(v)
+		return m, nil
+	case imgDownloadDoneMsg:
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+func (m imgDownloadProgressModel) View() string {
+	const cycleBytes = 1 << 20
+	pct := float64(m.received%cycleBytes) / float64(cycleBytes)
+	return m.label + " " + m.bar.ViewAs(pct) + fmt.Sprintf(" %d B", m.received) + "\n"
 }

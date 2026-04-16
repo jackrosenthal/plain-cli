@@ -1,4 +1,4 @@
-package cmd
+package audio
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackrosenthal/plain-cli/internal/api"
 	"github.com/jackrosenthal/plain-cli/internal/client"
+	"github.com/jackrosenthal/plain-cli/internal/cmdutil"
 	"github.com/jackrosenthal/plain-cli/internal/output"
 )
 
@@ -93,64 +94,64 @@ const (
 }`
 )
 
-type AudioCmd struct {
-	LS       AudioLSCmd       `cmd:"" help:"List audio files."`
-	Play     AudioPlayCmd     `cmd:"" help:"Play an audio file."`
-	Mode     AudioModeCmd     `cmd:"" help:"Set playback mode."`
-	Trash    AudioTrashCmd    `cmd:"" help:"Trash audio files."`
-	Restore  AudioRestoreCmd  `cmd:"" help:"Restore audio files from trash."`
-	Delete   AudioDeleteCmd   `cmd:"" help:"Delete audio files permanently."`
-	Playlist AudioPlaylistCmd `cmd:"" help:"Manage the audio playlist."`
+type Cmd struct {
+	LS       LSCmd       `cmd:"" help:"List audio files."`
+	Play     PlayCmd     `cmd:"" help:"Play an audio file."`
+	Mode     ModeCmd     `cmd:"" help:"Set playback mode."`
+	Trash    TrashCmd    `cmd:"" help:"Trash audio files."`
+	Restore  RestoreCmd  `cmd:"" help:"Restore audio files from trash."`
+	Delete   DeleteCmd   `cmd:"" help:"Delete audio files permanently."`
+	Playlist PlaylistCmd `cmd:"" help:"Manage the audio playlist."`
 }
 
-type AudioLSCmd struct {
+type LSCmd struct {
 	Query  string `help:"Search query."`
 	Sort   string `help:"Sort field."`
 	Limit  int    `help:"Maximum number of results to return."`
 	Offset int    `help:"Number of results to skip."`
 }
 
-type AudioPlayCmd struct {
+type PlayCmd struct {
 	Path string `arg:"" help:"Audio path."`
 }
 
-type AudioModeCmd struct {
+type ModeCmd struct {
 	Mode string `arg:"" help:"Playback mode." enum:"order,shuffle,repeat,repeat-one"`
 }
 
-type AudioTrashCmd struct {
+type TrashCmd struct {
 	Query string `arg:"" help:"Selection query."`
 }
 
-type AudioRestoreCmd struct {
+type RestoreCmd struct {
 	Query string `arg:"" help:"Selection query."`
 }
 
-type AudioDeleteCmd struct {
+type DeleteCmd struct {
 	Query string `arg:"" help:"Selection query."`
 }
 
-type AudioPlaylistCmd struct {
-	LS      AudioPlaylistLSCmd      `cmd:"" help:"Show the current playlist."`
-	Add     AudioPlaylistAddCmd     `cmd:"" help:"Add audio to the playlist."`
-	Remove  AudioPlaylistRemoveCmd  `cmd:"" help:"Remove an item from the playlist."`
-	Clear   AudioPlaylistClearCmd   `cmd:"" help:"Clear the playlist."`
-	Reorder AudioPlaylistReorderCmd `cmd:"" help:"Reorder the playlist."`
+type PlaylistCmd struct {
+	LS      PlaylistLSCmd      `cmd:"" help:"Show the current playlist."`
+	Add     PlaylistAddCmd     `cmd:"" help:"Add audio to the playlist."`
+	Remove  PlaylistRemoveCmd  `cmd:"" help:"Remove an item from the playlist."`
+	Clear   PlaylistClearCmd   `cmd:"" help:"Clear the playlist."`
+	Reorder PlaylistReorderCmd `cmd:"" help:"Reorder the playlist."`
 }
 
-type AudioPlaylistLSCmd struct{}
+type PlaylistLSCmd struct{}
 
-type AudioPlaylistAddCmd struct {
+type PlaylistAddCmd struct {
 	Query string `arg:"" help:"Selection query."`
 }
 
-type AudioPlaylistRemoveCmd struct {
+type PlaylistRemoveCmd struct {
 	Path string `arg:"" help:"Audio path to remove."`
 }
 
-type AudioPlaylistClearCmd struct{}
+type PlaylistClearCmd struct{}
 
-type AudioPlaylistReorderCmd struct {
+type PlaylistReorderCmd struct {
 	Paths []string `arg:"" help:"Playlist paths in desired order."`
 }
 
@@ -176,18 +177,18 @@ type audioPlaylistResponse struct {
 
 type audioMutationResponse struct {
 	Data struct {
-		UpdateAudioPlayMode bool                `json:"updateAudioPlayMode"`
-		TrashMediaItems     mediaMutationResult `json:"trashMediaItems"`
-		RestoreMediaItems   mediaMutationResult `json:"restoreMediaItems"`
-		DeleteMediaItems    mediaMutationResult `json:"deleteMediaItems"`
-		AddPlaylistAudios   bool                `json:"addPlaylistAudios"`
-		DeletePlaylistAudio bool                `json:"deletePlaylistAudio"`
-		ClearAudioPlaylist  bool                `json:"clearAudioPlaylist"`
-		ReorderPlaylist     bool                `json:"reorderPlaylistAudios"`
+		UpdateAudioPlayMode bool                        `json:"updateAudioPlayMode"`
+		TrashMediaItems     cmdutil.MediaMutationResult `json:"trashMediaItems"`
+		RestoreMediaItems   cmdutil.MediaMutationResult `json:"restoreMediaItems"`
+		DeleteMediaItems    cmdutil.MediaMutationResult `json:"deleteMediaItems"`
+		AddPlaylistAudios   bool                        `json:"addPlaylistAudios"`
+		DeletePlaylistAudio bool                        `json:"deletePlaylistAudio"`
+		ClearAudioPlaylist  bool                        `json:"clearAudioPlaylist"`
+		ReorderPlaylist     bool                        `json:"reorderPlaylistAudios"`
 	} `json:"data"`
 }
 
-func (c *AudioLSCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *LSCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	audios, err := listAudios(
 		context.Background(),
 		apiClient,
@@ -203,7 +204,7 @@ func (c *AudioLSCmd) Run(apiClient *client.Client, printer output.Printer) error
 	return printer.PrintList(audios)
 }
 
-func (c *AudioPlayCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *PlayCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp playAudioResponse
 	if err := apiClient.GraphQL(context.Background(), playAudioMutation, map[string]any{
 		"path": c.Path,
@@ -214,7 +215,7 @@ func (c *AudioPlayCmd) Run(apiClient *client.Client, printer output.Printer) err
 	return printer.Print(resp.Data.PlayAudio)
 }
 
-func (c *AudioModeCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *ModeCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp audioMutationResponse
 	if err := apiClient.GraphQL(context.Background(), updateAudioPlayModeMutation, map[string]any{
 		"mode": api.MediaPlayMode(c.Mode).ToGraphQL(),
@@ -225,13 +226,10 @@ func (c *AudioModeCmd) Run(apiClient *client.Client, printer output.Printer) err
 		return errors.New("update audio play mode: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Playback mode set to %s.", c.Mode),
-	})
+	return nil
 }
 
-func (c *AudioTrashCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *TrashCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	result, err := runAudioMediaMutation(context.Background(), apiClient, trashAudioMutation, c.Query)
 	if err != nil {
 		return err
@@ -240,7 +238,7 @@ func (c *AudioTrashCmd) Run(apiClient *client.Client, printer output.Printer) er
 	return printer.Print(result)
 }
 
-func (c *AudioRestoreCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *RestoreCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	result, err := runAudioMediaMutation(context.Background(), apiClient, restoreAudioMutation, c.Query)
 	if err != nil {
 		return err
@@ -249,7 +247,7 @@ func (c *AudioRestoreCmd) Run(apiClient *client.Client, printer output.Printer) 
 	return printer.Print(result)
 }
 
-func (c *AudioDeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *DeleteCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	result, err := runAudioMediaMutation(context.Background(), apiClient, deleteAudioMutation, c.Query)
 	if err != nil {
 		return err
@@ -258,7 +256,7 @@ func (c *AudioDeleteCmd) Run(apiClient *client.Client, printer output.Printer) e
 	return printer.Print(result)
 }
 
-func (c *AudioPlaylistLSCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *PlaylistLSCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp audioPlaylistResponse
 	if err := apiClient.GraphQL(context.Background(), audioPlaylistQuery, nil, &resp); err != nil {
 		return fmt.Errorf("query audio playlist: %w", err)
@@ -267,7 +265,7 @@ func (c *AudioPlaylistLSCmd) Run(apiClient *client.Client, printer output.Printe
 	return printer.PrintList(resp.Data.App.Audios)
 }
 
-func (c *AudioPlaylistAddCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *PlaylistAddCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp audioMutationResponse
 	if err := apiClient.GraphQL(context.Background(), addPlaylistAudiosMutation, map[string]any{
 		"query": c.Query,
@@ -278,13 +276,10 @@ func (c *AudioPlaylistAddCmd) Run(apiClient *client.Client, printer output.Print
 		return errors.New("add playlist audios: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: "Audio added to playlist.",
-	})
+	return nil
 }
 
-func (c *AudioPlaylistRemoveCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *PlaylistRemoveCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp audioMutationResponse
 	if err := apiClient.GraphQL(context.Background(), deletePlaylistAudioMutation, map[string]any{
 		"path": c.Path,
@@ -295,13 +290,10 @@ func (c *AudioPlaylistRemoveCmd) Run(apiClient *client.Client, printer output.Pr
 		return errors.New("remove playlist audio: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: "Audio removed from playlist.",
-	})
+	return nil
 }
 
-func (c *AudioPlaylistClearCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *PlaylistClearCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp audioMutationResponse
 	if err := apiClient.GraphQL(context.Background(), clearAudioPlaylistMutation, nil, &resp); err != nil {
 		return fmt.Errorf("clear audio playlist: %w", err)
@@ -310,13 +302,10 @@ func (c *AudioPlaylistClearCmd) Run(apiClient *client.Client, printer output.Pri
 		return errors.New("clear audio playlist: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: "Playlist cleared.",
-	})
+	return nil
 }
 
-func (c *AudioPlaylistReorderCmd) Run(apiClient *client.Client, printer output.Printer) error {
+func (c *PlaylistReorderCmd) Run(apiClient *client.Client, printer output.Printer) error {
 	var resp audioMutationResponse
 	if err := apiClient.GraphQL(context.Background(), reorderPlaylistAudiosMutation, map[string]any{
 		"paths": c.Paths,
@@ -327,10 +316,7 @@ func (c *AudioPlaylistReorderCmd) Run(apiClient *client.Client, printer output.P
 		return errors.New("reorder playlist audios: mutation returned false")
 	}
 
-	return printer.Print(mutationStatus{
-		Status:  "ok",
-		Message: fmt.Sprintf("Reordered %d playlist item(s).", len(c.Paths)),
-	})
+	return nil
 }
 
 func listAudios(
@@ -349,16 +335,16 @@ func listAudios(
 		return fetchAudiosPage(ctx, apiClient, query, sortBy, offset, limit)
 	}
 
-	audios := make([]api.Audio, 0, filesPageSize)
+	audios := make([]api.Audio, 0, cmdutil.FilesPageSize)
 	currentOffset := offset
 	for {
-		page, err := fetchAudiosPage(ctx, apiClient, query, sortBy, currentOffset, filesPageSize)
+		page, err := fetchAudiosPage(ctx, apiClient, query, sortBy, currentOffset, cmdutil.FilesPageSize)
 		if err != nil {
 			return nil, err
 		}
 
 		audios = append(audios, page...)
-		if len(page) < filesPageSize {
+		if len(page) < cmdutil.FilesPageSize {
 			return audios, nil
 		}
 
@@ -392,13 +378,13 @@ func runAudioMediaMutation(
 	apiClient *client.Client,
 	mutation string,
 	query string,
-) (mediaMutationResult, error) {
+) (cmdutil.MediaMutationResult, error) {
 	var resp audioMutationResponse
 	if err := apiClient.GraphQL(ctx, mutation, map[string]any{
 		"query": query,
 		"type":  api.DataTypeAudio.ToGraphQL(),
 	}, &resp); err != nil {
-		return mediaMutationResult{}, fmt.Errorf("run audio media mutation: %w", err)
+		return cmdutil.MediaMutationResult{}, fmt.Errorf("run audio media mutation: %w", err)
 	}
 
 	switch mutation {
@@ -409,6 +395,6 @@ func runAudioMediaMutation(
 	case deleteAudioMutation:
 		return resp.Data.DeleteMediaItems, nil
 	default:
-		return mediaMutationResult{}, errors.New("run audio media mutation: unknown mutation")
+		return cmdutil.MediaMutationResult{}, errors.New("run audio media mutation: unknown mutation")
 	}
 }
