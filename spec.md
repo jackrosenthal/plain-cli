@@ -268,9 +268,8 @@ plain
 │
 ├── screen
 │   ├── status
-│   ├── start [--audio]
-│   ├── stop
-│   └── quality <auto|hd|smooth>
+│   ├── quality <auto|hd|smooth>
+│   └── view [--audio] [--player auto|mpv|ffplay]
 │
 ├── pomodoro
 │   ├── status

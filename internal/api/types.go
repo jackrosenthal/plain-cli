@@ -515,7 +515,7 @@ type ImageSearchStatus struct {
 
 type ScreenMirrorQuality struct {
 	Mode       ScreenMirrorMode `json:"mode"`
-	Resolution string           `json:"resolution"`
+	Resolution int              `json:"resolution"`
 }
 
 type DataType string

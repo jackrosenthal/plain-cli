@@ -350,7 +350,7 @@ type Battery {
   capacity: Int
 }
 
-type ScreenMirrorQuality { mode: ScreenMirrorMode!, resolution: String }
+type ScreenMirrorQuality { mode: ScreenMirrorMode!, resolution: Int }
 
 type PomodoroToday {
   date: String!, completedCount: Int!, currentRound: Int!
@@ -526,7 +526,7 @@ query {
 
 ```graphql
 query {
-  screenMirrorState         # String enum: IDLE | STARTED | ...
+  screenMirrorState         # Boolean: true if mirror is running
   screenMirrorControlEnabled
   screenMirrorQuality { mode resolution }
 }
@@ -713,11 +713,12 @@ mutation sendScreenMirrorControl($input: ScreenMirrorControlInput!) { sendScreen
 
 ```graphql
 input WebRtcSignalingMessage {
-  type: String!   # "offer" | "answer" | "candidate"
+  type: String!   # "ready" | "answer" | "ice_candidate"
   sdp: String
   candidate: String
   sdpMid: String
   sdpMLineIndex: Int
+  phoneIp: String  # required for type "ready" (hostname from host URL)
 }
 mutation sendWebRtcSignaling($payload: WebRtcSignalingMessage!) { sendWebRtcSignaling(payload: $payload) }
 ```
@@ -900,17 +901,24 @@ WebRTC signaling rides on the GraphQL + WebSocket transports already described.
 
 ### Flow
 
-1. Call `startScreenMirror(audio: true|false)` mutation.
-2. Device sends an SDP offer via WebSocket event type 6 (`webrtc_signaling`), payload:
+1. Connect to the WebSocket event stream and wait for the connection to be registered (clock sync frame acknowledged — `OnConnected`).
+2. Call `startScreenMirror(audio: true|false)` mutation.
+3. Wait for a WebSocket event type 5 (`screen_mirroring`) — the phone has started `initCapture` and is ready.
+4. Send the `ready` signal so the phone knows the client's address:
+   ```graphql
+   mutation { sendWebRtcSignaling(payload: { type: "ready", phoneIp: "<hostname>" }) }
+   ```
+   where `phoneIp` is the hostname extracted from the server host URL.
+5. Phone sends an SDP offer via WebSocket event type 6 (`webrtc_signaling`):
    ```json
    { "type": "offer", "sdp": "v=0\r\n..." }
    ```
-3. Client creates a peer connection (receive-only), sets the remote description, generates an SDP answer, and sends it back:
+6. Client creates a receive-only peer connection, sets the remote description, generates an SDP answer, and sends it back:
    ```graphql
    mutation { sendWebRtcSignaling(payload: { type: "answer", sdp: "..." }) }
    ```
-4. Both sides exchange ICE candidates the same way (type `"candidate"` with `candidate`, `sdpMid`, `sdpMLineIndex` fields).
-5. Once the ICE connection is established, the device streams audio/video to the browser.
-6. Call `stopScreenMirror` mutation to end the session.
+7. Both sides exchange ICE candidates via the same mutation (type `"ice_candidate"` with `candidate`, `sdpMid`, `sdpMLineIndex` fields).
+8. Once the ICE connection is established, the device streams video (and optionally audio) RTP to the client.
+9. Call `stopScreenMirror` mutation to end the session.
 
 Quality can be changed mid-session with `updateScreenMirrorQuality(mode: AUTO|HD|SMOOTH)`.

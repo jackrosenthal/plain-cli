@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -35,6 +36,9 @@ const (
 )
 
 type EventHandler struct {
+	// OnConnected is called after the WebSocket clock sync frame is sent,
+	// indicating the session is registered on the server and ready to receive events.
+	OnConnected              func()
 	MessageCreated           func(MessageCreatedEvent)
 	MessageDeleted           func(MessageDeletedEvent)
 	MessageUpdated           func(MessageUpdatedEvent)
@@ -217,6 +221,12 @@ type ImageSearchUpdatedEvent struct {
 	IndexedImages    int     `json:"indexedImages"`
 }
 
+// ConnectEventsOnce connects to the event stream once, returning on disconnect
+// or context cancellation without reconnecting.
+func ConnectEventsOnce(ctx context.Context, c *Client, h EventHandler) error {
+	return connectEventsOnce(ctx, c, h)
+}
+
 func ConnectEvents(ctx context.Context, c *Client, h EventHandler) error {
 	backoff := time.Second
 
@@ -271,6 +281,10 @@ func connectEventsOnce(ctx context.Context, c *Client, h EventHandler) error {
 		return err
 	}
 
+	if h.OnConnected != nil {
+		h.OnConnected()
+	}
+
 	for {
 		messageType, payload, err := conn.Read(ctx)
 		if err != nil {
@@ -283,12 +297,12 @@ func connectEventsOnce(ctx context.Context, c *Client, h EventHandler) error {
 		if messageType != websocket.MessageBinary {
 			return fmt.Errorf("unexpected websocket message type %d", messageType)
 		}
-		if len(payload) < 1 {
-			return errors.New("event frame missing type byte")
+		if len(payload) < 4 {
+			return errors.New("event frame too short")
 		}
 
-		eventType := payload[0]
-		plaintext, err := Decrypt(c.SessionKey, payload[1:])
+		eventType := byte(binary.BigEndian.Uint32(payload[:4]))
+		plaintext, err := Decrypt(c.SessionKey, payload[4:])
 		if err != nil {
 			return err
 		}

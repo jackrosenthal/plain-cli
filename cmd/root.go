@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/alecthomas/kong"
@@ -36,6 +37,7 @@ type CLI struct {
 	Token    string        `help:"Auth token (base64)." env:"PLAIN_TOKEN"`
 	ClientID string        `name:"client-id" help:"Stable client UUID." env:"PLAIN_CLIENT_ID"`
 	Output   output.Format `help:"Output format." env:"PLAIN_OUTPUT" enum:"table,json,plain" default:"table"`
+	Verbose  bool          `short:"v" help:"Enable verbose logging." env:"PLAIN_VERBOSE"`
 
 	Auth          auth.Cmd          `cmd:"" help:"Authentication commands."`
 	Device        device.Cmd        `cmd:"" help:"Device queries and actions."`
@@ -59,6 +61,11 @@ type CLI struct {
 }
 
 func (c *CLI) AfterApply(ctx *kong.Context) error {
+	level := slog.LevelWarn
+	if c.Verbose {
+		level = slog.LevelDebug
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})))
 	cfg, err := config.Load()
 	if err != nil {
 		return err
